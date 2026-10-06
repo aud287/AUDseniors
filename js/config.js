@@ -9,7 +9,7 @@ window.SITE = {
   frameOpens: "2026-12-18T00:00:00",     // Frame tool stays locked with a "coming soon" overlay until this date/time. Leave "" to unlock it right away.
   date: "2026-12-19T13:00:00",           // graduation date & time
   since: "2021-10-10",                   // "days since" counter
-  music: "assets/audio/music.mp3",       // put your mp3 here (plays with the intro)
+  music: "assets/audio/music1.mp3",       // put your mp3 here (plays with the intro)
   gradsound: "assets/audio/grad.mp3",                         // graduation-day sound, e.g. assets/audio/grad.mp3
   milestones: ``,                        // countdown sounds, one per line: 50=assets/audio/50days.mp3
   backend: "https://script.google.com/macros/s/AKfycbx5_9AO4Hr3VMW3uStbMeIqK0DgZ4_pZdLd6x8iV6-G-FOL7Qmmbjs17qocvsPt11JJ/exec",                           // Google Apps Script Web app URL (see README.md)
@@ -30,16 +30,17 @@ party_popper | WE MADE IT`,
   /* ===== المشروع الخيري للدفعة (Charity project) — كل شيء هنا ===== */
   charityTitle: `المشروع الخيري للدفعة`,
   charityText: `شاركنا في المشروع الخيري للدفعة. كل مساهمة، مهما كانت بسيطة، بتفرق.`,
-  charityImage: ``,                      // ضع صورة التصميم في assets/ واكتب مسارها هنا، مثال: assets/charity.jpg  (فاضي = تظهر "التصميم قريبًا")
+  charityImage: `assets/charity.jpg`,                      // ضع صورة التصميم في assets/ واكتب مسارها هنا، مثال: assets/charity.jpg  (فاضي = تظهر "التصميم قريبًا")
   /* وسائل التبرع — سطر لكل وسيلة:   النوع | الاسم الظاهر | الرقم | لينك التبرع (اختياري)
      النوع: vodafone أو instapay.
      • لو كتبت لينك: الضغط على الكارت بيفتح لينك التبرع مباشرة (وفيه زرار صغير لنسخ الرقم).
      • لو مفيش لينك: الضغط على الكارت بينسخ الرقم.
      • لو الرقم واللينك فاضيين: الكارت بيظهر "قريبًا".
      مثال إنستا باي:  instapay | InstaPay | 01012345678 | https://ipn.eg/S/username/instapay/xxxxxx */
-  donate: `vodafone | Vodafone Cash | |
-instapay | InstaPay (1) | |
-instapay | InstaPay (2) | |`,
+  donate: `vodafone | Vodafone Cash | 01025696317 |
+    vodafone | Vodafone Cash | 01019092741 |
+instapay | InstaPay (1) | 01025696317 |
+instapay | InstaPay (2) | 01274187463 |`,
 
   stats: `hot_beverage | Cups of coffee | ∞
 sleeping_face | Hours of sleep we never got | ∞
