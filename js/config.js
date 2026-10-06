@@ -52,10 +52,10 @@ facebook=https://www.facebook.com/profile.php?id=61583995127897
 X=https://x.com/AudMed2026
 telegram=`,
 
-  events: `coat | Senior Jacket Day | SOON | HALL | Pick up your jacket and take the group photo.
+  events: `coat | Senior Jacket Day | 2026-10-29 10:00 | HALL | Pick up your jacket and take the group photo.
 party_popper | Graduation Ceremony | 2026-12-19 13:00 | College | The chapter is complete. Arrive by 12:00.`,
 
-  announce: `Senior Jacket Day is coming! | SOON | | 2026-09-01 | 2026-10-12`,
+  announce: `Senior Jacket Day is coming! | SOON | | 2026-09-01 | 2026-10-29`,
 
   polls: `خد من الكلية ايه؟ | مدمن كافيين | اقرعيت من الصلع الوراثي | بتسف بنادول | ارق ومعرفش انام  
 كام مره طبقت ف الامتحانات؟ | ولا مرة | مرتين او تلاتة | كتير | يعني ايه نوم  
