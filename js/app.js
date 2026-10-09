@@ -301,27 +301,40 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
    v[i]++;pollSeen[k]=v[i];pollPut(p.q,i,o[0]);lock(i,1);api({action:'vote',poll:pi,option:i})};c.append(b)});
  c.append(m);w.append(c);const j=saved();if(j>=0)lock(j,0)})}
 
-/* ---- messages: shown right away (no approval step); wall caps at MSG_N, "more" opens a flip-through reader ---- */
-let msgSort='new';const MSG_N=12;
+/* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
+let msgSort='new',msgFirst=true;const MSG_SHOW=4;
 const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
-function msgs(M){const all=sortedMsgs(M),n=Math.min(MSG_N,all.length),w=$('#wall');w.replaceChildren();
- all.slice(0,n).forEach((m,i)=>{const c=el('article','msg');c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','Read message from '+clean(m.name,30));
-  c.style.setProperty('--r',(((i*47)%7)-3)*1.1+'deg');c.append(el('p','',clean(m.message,240)),el('small','','— '+clean(m.name,30)));
+const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const tmFmt=t=>t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';if(s<604800)return Math.floor(s/86400)+' d ago';return''};
+function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,240),t=new Date(m.date),okd=!!m.date&&!isNaN(t);
+ let h=0;for(const ch of nm)h=(h*31+ch.codePointAt(0))>>>0;
+ const c=el('article','msg a'+(i%3)),hd=el('div','mh'),av=el('span','av c'+(h%5),([...nm][0]||'?').toUpperCase()),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
+ hd.append(av,who);
+ if(okd){const tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);who.append(tm);
+  const lf=el('span','lf');lf.append(el('i','',MON[t.getMonth()]),el('b','',t.getDate()));if(t.getFullYear()!==new Date().getFullYear())lf.append(el('em','',t.getFullYear()));lf.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(lf)}
+ const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';c.append(hd,p);return c}
+function fitWall(){const w=$('#wall'),k=w.children;w.style.maxHeight='';if(k.length<=MSG_SHOW||!k[MSG_SHOW].classList.contains('msg'))return;
+ const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[MSG_SHOW].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
+function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),st=w.scrollTop;w.replaceChildren();
+ if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
+ all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','Read message from '+clean(m.name,30));
+  if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
   c.onclick=()=>openMR(all,i);c.onkeydown=e=>{if(e.key=='Enter'||e.key==' '){e.preventDefault();openMR(all,i)}};
   if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d)}
   w.append(c)});
- $('#mcnt').textContent=n+' / '+all.length+' messages';$('#mmore').hidden=all.length<=n}
-$('#mmore').onclick=()=>{const all=sortedMsgs(MSG);if(all.length)openMR(all,Math.min(MSG_N,all.length))};
-$('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG)};
+ if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
+ $('#mcnt').textContent=all.length+(all.length==1?' message':' messages')+(all.length>MSG_SHOW?' · scroll to read them all':'')}
+$('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
+addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
+setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
 let MGAL=[],MGI=0;
-function fillMR(){const m=MGAL[MGI],b=$('#mrc');b.replaceChildren();
- const c=el('article','msg mrcard');c.append(el('p','',clean(m.message,240)),el('small','','— '+clean(m.name,30)+(m.date?' · '+fmt(m.date):'')));
- b.append(c);$('#mridx').textContent=(MGI+1)+' / '+MGAL.length}
+function fillMR(){const b=$('#mrc');b.replaceChildren();const c=msgCard(MGAL[MGI],MGI);c.classList.add('mrcard');b.append(c);$('#mridx').textContent=(MGI+1)+' / '+MGAL.length}
 function openMR(L,i){if(!L.length)return;MGAL=L;MGI=((i%L.length)+L.length)%L.length;fillMR();if(!$('#mr').open)$('#mr').showModal()}
 $('#mrp').onclick=()=>{MGI=(MGI-1+MGAL.length)%MGAL.length;fillMR()};$('#mrn').onclick=()=>{MGI=(MGI+1)%MGAL.length;fillMR()};
 $('#mf').onsubmit=async e=>{e.preventDefault();const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
  const form=e.target,btn=form.querySelector('button'),tmp={name:n,message:t,date:new Date().toISOString()};
- if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG);form.reset();       // shown right away; the server catches up in the background
+ if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();       // shown right away; the server catches up in the background
  const r=await api({action:'message',name:n,message:t});if(btn)btn.disabled=false;
  if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;return toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};

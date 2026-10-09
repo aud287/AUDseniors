@@ -85,8 +85,8 @@
 
 <section id="messages" class="rv"><h2>LEAVE A PIECE OF YOURSELF</h2>
 <div class="chips-wrap"><p class="sub" style="margin:0">Messages from the class. New notes appear right away.</p><select id="msort" class="sortsel" aria-label="Sort messages"><option value="new">Newest first</option><option value="old">Oldest first</option></select></div>
-<div class="wall" id="wall"></div>
-<div class="row"><span id="mcnt" class="cnt"></span><button class="btn g" id="mmore">SHOW MORE MESSAGES</button></div>
+<div class="wall" id="wall" role="region" aria-label="Messages from the class"></div>
+<div class="row"><span id="mcnt" class="cnt"></span></div>
 <form id="mf" class="glass"><input id="mn" maxlength="30" placeholder="Name / Nickname" aria-label="Name" required="required"/><textarea id="mt" maxlength="240" rows="3" placeholder="Write something for the class…" aria-label="Message" required="required"></textarea><button class="btn">POST MESSAGE</button></form></section>
 
 <section id="events" class="rv"><h2>WHAT'S HAPPENING?</h2><p class="sub">Save the dates.</p><div class="evs" id="ev"></div></section>
