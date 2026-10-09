@@ -311,7 +311,7 @@ function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,
  const c=el('article','msg a'+(i%3)),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
  /* header: date + time stacked on the LEFT (plain text), the sender's name on the RIGHT (any language) */
  if(okd){const wh=el('div','when'),tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);
-  wh.append(el('small','dt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
+  wh.append(el('small','mdt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
  hd.append(who);
  const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';c.append(hd,p);return c}
 function fitWall(){const w=$('#wall'),k=w.children;w.style.maxHeight='';if(k.length<=MSG_SHOW||!k[MSG_SHOW].classList.contains('msg'))return;
