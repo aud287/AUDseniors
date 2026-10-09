@@ -286,13 +286,20 @@ const SINCE=new Date(G('since')||'2021-10-10').getTime();
  PP('stats').filter(a=>a.length>1).forEach(a=>{const c=el('div','card glass sc');const e=el('div','ei');e.append(ic(a[0]));c.append(e,el('b','nb',a[2]||'∞'),el('small','',a[1]));$('#sg').append(c)})})();
 function count(){const e=$('#sd'),v=+e.dataset.v,t0=performance.now();if(RM)return;(function f(t){const k=Math.min(1,(t-t0)/1800);e.textContent=Math.round(v*(1-Math.pow(1-k,3))).toLocaleString('en');if(k<1)requestAnimationFrame(f)})(t0)}
 
-/* ---- polls ---- */
-let pollVoted=0;
-function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const c=el('div','card glass'),v=p.o.map(o=>o[1]),bs=[],m=el('small','pm');let done=0;c.append(el('h3','',p.q));
- const paint=()=>{const t=v.reduce((a,b)=>a+b,0)||1;bs.forEach((b,i)=>{const r=Math.round(v[i]/t*100);b.f.style.width=r+'%';b.r.textContent=r+'% · '+v[i]})};
+/* ---- polls: one vote per device (remembered in this browser). After voting, the card shows your pick, the results and the total votes ---- */
+const PKEY='aud_polls_v1',pollMem={},pollSeen={};
+const pollGet=q=>{const k=h32(q);let o={};try{o=JSON.parse(localStorage.getItem(PKEY)||'{}')||{}}catch(e){}return o[k]||pollMem[k]||null};
+const pollPut=(q,i,t)=>{const k=h32(q),v=[i,t];pollMem[k]=v;try{const o=JSON.parse(localStorage.getItem(PKEY)||'{}')||{};o[k]=v;localStorage.setItem(PKEY,JSON.stringify(o))}catch(e){}};
+function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const c=el('div','card glass'),v=p.o.map(o=>o[1]),bs=[],m=el('small','pm'),k=h32(p.q);let mine=-1,msg='';c.append(el('h3','',p.q));
+ const saved=()=>{const s=pollGet(p.q);if(!s)return -1;const j=p.o.findIndex(o=>o[0]===s[1]);return j>=0?j:(s[0]>=0&&s[0]<p.o.length?s[0]:-1)};
+ const paint=()=>{if(mine>=0)v[mine]=Math.max(v[mine],pollSeen[k]||0,1);const tot=v.reduce((a,b)=>a+b,0),t=tot||1;
+  bs.forEach((b,i)=>{const r=Math.round(v[i]/t*100);b.f.style.width=r+'%';b.r.textContent=r+'% · '+v[i]});
+  m.replaceChildren(el('span','',msg),el('span','pt','Total votes: '+tot))};
+ const lock=(i,fresh)=>{mine=i;msg=fresh?'Your vote has been recorded.':'You already voted here. One vote per device.';bs.forEach((x,j)=>{x.disabled=true;x.classList.toggle('sel',j===i)});paint()};
  p.o.forEach((o,i)=>{const b=el('button','opt'),f=el('i'),s=el('span'),r=el('em');b.type='button';s.append(el('em','',o[0]),r);b.append(f,s);b.f=f;b.r=r;bs.push(b);
-  b.onclick=()=>{if(done)return;done=1;pollVoted=1;v[i]++;b.classList.add('sel');bs.forEach(x=>x.disabled=true);paint();m.textContent='Your vote has been recorded.';api({action:'vote',poll:pi,option:i})};c.append(b)});
- c.append(m);w.append(c)})}
+  b.onclick=()=>{const j=mine>=0?mine:saved();if(j>=0){lock(j,0);return}         // already voted on this device (even from another tab): no second vote
+   v[i]++;pollSeen[k]=v[i];pollPut(p.q,i,o[0]);lock(i,1);api({action:'vote',poll:pi,option:i})};c.append(b)});
+ c.append(m);w.append(c);const j=saved();if(j>=0)lock(j,0)})}
 
 /* ---- messages: shown right away (no approval step); wall caps at MSG_N, "more" opens a flip-through reader ---- */
 let msgSort='new';const MSG_N=12;
@@ -488,13 +495,14 @@ async function adminInit(){let k='';try{k=sessionStorage.getItem('adk')||''}catc
  else{try{sessionStorage.removeItem('adk')}catch(e){}toast(r.error=='unset'?'Change ADMIN_KEY in Code.gs first.':'Admin key not accepted.')}}
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
-(async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='';
+(async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
  const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify((rp.messages||[]).map(m=>m.id)));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
   const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?(rp.messages||[]):MESSAGES;msgs(MSG)}
-  const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));if(!pollVoted)pollsR(POLLS)};
+  const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
+  const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device
  const show=rp=>{paint(rp);ready=true;window.DATA_READY=1};
  if(!BACKEND.enabled){show({});return}
  if(cur)show(cur);else boardSkeleton();
