@@ -304,15 +304,15 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
 /* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
 let msgSort='new',msgFirst=true;const MSG_SHOW=4;
 const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
-const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const tmFmt=t=>t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
 const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';if(s<604800)return Math.floor(s/86400)+' d ago';return''};
 function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,240),t=new Date(m.date),okd=!!m.date&&!isNaN(t);
- let h=0;for(const ch of nm)h=(h*31+ch.codePointAt(0))>>>0;
- const c=el('article','msg a'+(i%3)),hd=el('div','mh'),av=el('span','av c'+(h%5),([...nm][0]||'?').toUpperCase()),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
- hd.append(av,who);
- if(okd){const tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);who.append(tm);
-  const lf=el('span','lf');lf.append(el('i','',MON[t.getMonth()]),el('b','',t.getDate()));if(t.getFullYear()!==new Date().getFullYear())lf.append(el('em','',t.getFullYear()));lf.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(lf)}
+ const c=el('article','msg a'+(i%3)),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
+ /* header: date + time stacked on the LEFT (plain text), the sender's name on the RIGHT (any language) */
+ if(okd){const wh=el('div','when'),tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);
+  wh.append(el('small','dt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
+ hd.append(who);
  const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';c.append(hd,p);return c}
 function fitWall(){const w=$('#wall'),k=w.children;w.style.maxHeight='';if(k.length<=MSG_SHOW||!k[MSG_SHOW].classList.contains('msg'))return;
  const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[MSG_SHOW].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
