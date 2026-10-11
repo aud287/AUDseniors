@@ -30,11 +30,11 @@ const MEMORIES=[
 {cat:"FIRST DAY",title:"Lost in the anatomy lab",date:"2020-10-06",e:"🦴"}
 ];
 const MESSAGES=[
-{name:"Dr. Sleepy",message:"We came in as strangers and we leave as a family. 💛",status:"approved",date:"2026-09-19T21:40:00"},
-{name:"Anonymous",message:"Thank you for every 3 AM study call.",status:"approved",date:"2026-09-17T02:15:00"},
-{name:"Coffee Addict",message:"Still can't believe we actually made it!",status:"approved",date:"2026-09-12T18:05:00"},
-{name:"Last Row",message:"Best chaos of my life. Never change.",status:"approved",date:"2026-09-05T14:30:00"},
-{name:"Pending",message:"This one is waiting for approval.",status:"pending",date:"2026-09-20T09:00:00"}
+{id:"demo1",name:"Dr. Sleepy",message:"We came in as strangers and we leave as a family. 💛",status:"approved",date:"2026-09-19T21:40:00"},
+{id:"demo2",name:"Anonymous",message:"Thank you for every 3 AM study call.",status:"approved",date:"2026-09-17T02:15:00"},
+{id:"demo3",name:"Coffee Addict",message:"Still can't believe we actually made it!",status:"approved",date:"2026-09-12T18:05:00"},
+{id:"demo4",name:"Last Row",message:"Best chaos of my life. Never change.",status:"approved",date:"2026-09-05T14:30:00"},
+{id:"demo5",name:"Pending",message:"This one is waiting for approval.",status:"pending",date:"2026-09-20T09:00:00"}
 ];
 /* ================= ENGINE ================= */
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -193,16 +193,8 @@ $('#vwsort').onchange=e=>{VS=e.target.value;vRefresh()};
 (function(){const t=$('#vwstage');let sx=0,sy=0,on=0;                     // swipe left / right on the photo
  t.addEventListener('touchstart',e=>{const p=e.touches[0];sx=p.clientX;sy=p.clientY;on=1},{passive:true});
  t.addEventListener('touchend',e=>{if(!on)return;on=0;const p=e.changedTouches[0],dx=p.clientX-sx,dy=p.clientY-sy;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.2)vGo(dx<0?1:-1)},{passive:true})})();
-$('#mr').onclick=e=>{if(e.target===e.currentTarget)e.currentTarget.close()};
 $$('.cl,.x').forEach(b=>b.onclick=()=>b.closest('dialog').close());
-/* swipe left/right on the enlarged photo or message to move to the next/previous one */
-function swipeNav(sel,prevSel,nextSel){const t=$(sel);if(!t)return;let sx=0,sy=0,on=0;
- t.addEventListener('touchstart',e=>{const p=e.touches[0];sx=p.clientX;sy=p.clientY;on=1},{passive:true});
- t.addEventListener('touchend',e=>{if(!on)return;on=0;const p=e.changedTouches[0],dx=p.clientX-sx,dy=p.clientY-sy;
-  if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy))$(dx<0?nextSel:prevSel).click()},{passive:true})}
-swipeNav('#mrc','#mrp','#mrn');
-addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
- if(VW.open){if(VM=='view')vGo(e.key=='ArrowLeft'?-1:1)}else if($('#mr').open)$('#'+(e.key=='ArrowLeft'?'mrp':'mrn')).click()});
+addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;if(VW.open&&VM=='view')vGo(e.key=='ArrowLeft'?-1:1)});
 $('#add').onclick=openAdd;
 $('#af').onsubmit=async e=>{e.preventDefault();const f=$('#pf').files[0];if(!f||!/^image\//.test(f.type))return toast('Choose an image.');
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
@@ -303,35 +295,73 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
 
 /* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
 let msgSort='new',msgFirst=true;const MSG_SHOW=4;
-const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
+const isPin=m=>String(m.pin)==='1';                    // pinned message: always first, and it stays on screen while the wall scrolls
+const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{if(isPin(a)!==isPin(b))return isPin(a)?-1:1;const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const tmFmt=t=>t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
 const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';if(s<604800)return Math.floor(s/86400)+' d ago';return''};
+/* ---- reactions (Telegram style): tap a note -> a small picker; chips with counts sit under the text on the left; nothing shows until someone reacts ----
+   one reaction per device per message (tap another to change it, tap yours again to remove it) · counts live on the backend, "mine" is remembered on this device */
+const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['party','🎉','Celebrate'],['grad','🎓','Graduation']];
+const DEV=(()=>{try{let d=localStorage.getItem('aud_dev');if(!d){d=Array.from(crypto.getRandomValues(new Uint8Array(10)),x=>(x%36).toString(36)).join('');localStorage.setItem('aud_dev',d)}return d}catch(e){return'x'+Math.random().toString(36).slice(2,12)}})();
+let RX={};const RXT={},MINE=(()=>{try{return JSON.parse(localStorage.getItem('aud_mrx')||'{}')||{}}catch(e){return{}}})();      // RX: message id -> {love:n,...} · RXT: when I last changed it (a refresh cannot flicker it back for 20 s)
+const saveMine=()=>{try{localStorage.setItem('aud_mrx',JSON.stringify(MINE))}catch(e){}};
+const msgById=id=>MSG.find(x=>String(x.id)===String(id));
+function rxFoot(c,m){let f=c.querySelector('.mrx');if(!f){f=el('div','mrx');c.append(f)}
+ f.replaceChildren();if(!m.id){f.hidden=true;return}
+ const k=RX[m.id]||{},mine=MINE[m.id]||'',open=c.classList.contains('rx-open');
+ RXS.forEach(([key,em,label])=>{const n=k[key]||0;if(!n)return;
+  const b=el('button','rxc'+(mine==key?' me':''));b.type='button';b.title=label;b.setAttribute('aria-pressed',String(mine==key));b.setAttribute('aria-label',label+': '+n);
+  b.append(el('span','e',em),el('span','n',n));b.onclick=ev=>{ev.stopPropagation();react(m,mine==key?'':key)};f.append(b)});
+ if(open){const p=el('div','rxp');p.setAttribute('role','group');p.setAttribute('aria-label','Choose a reaction');
+  RXS.forEach(([key,em,label])=>{const b=el('button',mine==key?'on':'',em);b.type='button';b.title=label;b.setAttribute('aria-label',label);
+   b.onclick=ev=>{ev.stopPropagation();c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');react(m,mine==key?'':key)};p.append(b)});f.append(p)}
+ f.hidden=!f.childNodes.length}
+function closeRx(except){$$('#wall .msg.rx-open').forEach(c=>{if(c===except)return;c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');const m=msgById(c.dataset.id);if(m)rxFoot(c,m)})}
+function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open');closeRx(c);
+ c.classList.toggle('rx-open',!was);c.setAttribute('aria-expanded',String(!was));rxFoot(c,m);
+ if(!was){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
+  if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
+const rxDraw=id=>{const c=$('#wall .msg[data-id="'+String(id).replace(/"/g,'')+'"]'),m=msgById(id);if(c&&m)rxFoot(c,m)};
+async function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
+ const k=RX[id]=RX[id]||{};if(prev&&k[prev])k[prev]=Math.max(0,k[prev]-1);if(key)k[key]=(k[key]||0)+1;
+ if(key)MINE[id]=key;else delete MINE[id];saveMine();RXT[id]=Date.now();rxDraw(id);
+ const r=await api({action:'msgreact',id:String(id),emoji:key,dev:DEV});
+ if(r.ok&&r.counts&&(MINE[id]||'')===key){RX[id]=r.counts;rxDraw(id);return}
+ if(!r.ok&&!r.demo&&(MINE[id]||'')===key){                                  // the server refused: put it back the way it was
+  if(key&&k[key])k[key]--;if(prev)k[prev]=(k[prev]||0)+1;if(prev)MINE[id]=prev;else delete MINE[id];saveMine();rxDraw(id);
+  toast(r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction. Try again.')}}
+const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now();
+ Object.keys(s).forEach(id=>{if(now-(RXT[id]||0)>2e4)RX[id]=s[id]});Object.keys(RX).forEach(id=>{if(!(id in s)&&now-(RXT[id]||0)>2e4)delete RX[id]})};
+addEventListener('click',e=>{if(!e.target.closest('#wall .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
+/* admin: pin a message (a pinned note stays first and stays on screen while the wall scrolls). Admins can pin / unpin / delete, but never edit what someone wrote. */
+async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,pin:pin});
+ if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':r.error=='nomsg'?'That message no longer exists.':'Not saved. Check the admin key.');return}
+ if(pin)MSG.forEach(x=>{x.pin=''});m.pin=pin?'1':'';msgs(MSG,pin?'top':undefined);toast(pin?'Pinned to the top.':'Unpinned.')}
 function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,240),t=new Date(m.date),okd=!!m.date&&!isNaN(t);
- const c=el('article','msg a'+(i%3)),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
+ const c=el('article','msg a'+(i%3)+(isPin(m)?' pinned':'')),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
  /* header: date + time stacked on the LEFT (plain text), the sender's name on the RIGHT (any language) */
  if(okd){const wh=el('div','when'),tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);
   wh.append(el('small','mdt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
  hd.append(who);
- const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';c.append(hd,p);return c}
+ const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';if(isPin(m))c.append(el('small','pinb','\uD83D\uDCCC PINNED'));c.append(hd,p);return c}
 function fitWall(){const w=$('#wall'),k=w.children;w.style.maxHeight='';if(k.length<=MSG_SHOW||!k[MSG_SHOW].classList.contains('msg'))return;
  const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[MSG_SHOW].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
 function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),st=w.scrollTop;w.replaceChildren();
  if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
- all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','Read message from '+clean(m.name,30));
+ all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
   if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
-  c.onclick=()=>openMR(all,i);c.onkeydown=e=>{if(e.key=='Enter'||e.key==' '){e.preventDefault();openMR(all,i)}};
-  if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d)}
+  c.onclick=e=>{if(!e.target.closest('button'))toggleRx(c,m)};c.onkeydown=e=>{if(e.target===c&&(e.key=='Enter'||e.key==' ')){e.preventDefault();toggleRx(c,m)}};rxFoot(c,m);
+  if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d);
+   const p=el('button','mbtn mp'+(isPin(m)?' on':''),'📌');p.type='button';                              // admin only (hidden for visitors): pin / unpin
+   p.setAttribute('aria-label',isPin(m)?'Unpin message':'Pin message');p.title=isPin(m)?'Unpin':'Pin to top';
+   p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p)}
   w.append(c)});
- if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
+ w.classList.toggle('hp',!!all.length&&isPin(all[0]));if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
  $('#mcnt').textContent=all.length+(all.length==1?' message':' messages')+(all.length>MSG_SHOW?' · scroll to read them all':'')}
 $('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
-let MGAL=[],MGI=0;
-function fillMR(){const b=$('#mrc');b.replaceChildren();const c=msgCard(MGAL[MGI],MGI);c.classList.add('mrcard');b.append(c);$('#mridx').textContent=(MGI+1)+' / '+MGAL.length}
-function openMR(L,i){if(!L.length)return;MGAL=L;MGI=((i%L.length)+L.length)%L.length;fillMR();if(!$('#mr').open)$('#mr').showModal()}
-$('#mrp').onclick=()=>{MGI=(MGI-1+MGAL.length)%MGAL.length;fillMR()};$('#mrn').onclick=()=>{MGI=(MGI+1)%MGAL.length;fillMR()};
 $('#mf').onsubmit=async e=>{e.preventDefault();const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
  const form=e.target,btn=form.querySelector('button'),tmp={name:n,message:t,date:new Date().toISOString()};
  if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();       // shown right away; the server catches up in the background
@@ -509,11 +539,11 @@ async function adminInit(){let k='';try{k=sessionStorage.getItem('adk')||''}catc
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
- const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify((rp.messages||[]).map(m=>m.id)));
+ const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'']),rp.mr||{}]));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
-  const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?(rp.messages||[]):MESSAGES;msgs(MSG)}
+  mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?(rp.messages||[]):MESSAGES;msgs(MSG)}
   const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
   const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device
  const show=rp=>{paint(rp);ready=true;window.DATA_READY=1};

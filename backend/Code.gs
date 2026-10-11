@@ -25,15 +25,17 @@ const CHUNK = 30000;                      // cache chunk size (a cache value is 
 const THEMES = ['wine', 'gold', 'sky', 'mint'];   // looks of an admin text post
 const RESERVED = ['admin', 'administrator', 'official', 'moderator', 'support', 'ادمن', 'الادمن', 'مشرف', 'الادارة', 'ادارة']; // add your class page name here
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date'],
+  Messages: ['id', 'name', 'message', 'date', 'pin'],                   // pin: '1' = pinned to the top of the wall (only one at a time)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid'],
   Votes: ['poll', 'option', 'date'],
   Users: ['uid', 'name', 'nameKey', 'sk', 'avatar', 'badges', 'ne', 'avatarAt', 'date'],
   Reactions: ['post', 'uid', 'date'],
   Comments: ['id', 'post', 'parent', 'uid', 'text', 'date', 'media'],   // media: s:STICKER_NAME  or  i:DRIVE_FILE_ID
   Notes: ['id', 'kind', 'title', 'body', 'extra', 'category', 'date'],   // admin posts: text / event (occasion) / poll
-  PollVotes: ['post', 'uid', 'option', 'date']
+  PollVotes: ['post', 'uid', 'option', 'date'],
+  MsgReactions: ['msg', 'dev', 'emoji', 'date']             // reactions on wall messages: one per device per message
 };
+const MSG_EMO = ['love', 'haha', 'sad', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
 
 /* ---------- sheet helpers (every cell is written as plain text, so nothing a visitor types can become a formula) ---------- */
 const TABS = {};                                       // sheets opened during this request
@@ -173,11 +175,12 @@ function buildSnap() {
   N.forEach(r => { if (r.kind === 'poll') { let x = {}; try { x = JSON.parse(String(r.extra || '{}')); } catch (e) {} optLen[String(r.id)] = (x.options || []).length; } });
   V.forEach(v => { const k = String(v.post), n = optLen[k], o = Number(v.option); if (!n || !(o >= 0 && o < n)) return; (pc[k] = pc[k] || new Array(n).fill(0))[o]++; (pvIdx[String(v.uid)] = pvIdx[String(v.uid)] || {})[k] = o; });
   const top = Object.keys(score).filter(u => users[u] && score[u] >= TOPFAN_MIN).sort((a, b) => score[b] - score[a]).slice(0, TOPFAN_COUNT);
+  const mr = {}; rows('MsgReactions').forEach(r => { const k = String(r.msg), e = String(r.emoji); if (MSG_EMO.indexOf(e) < 0) return; mr[k] = mr[k] || {}; mr[k][e] = (mr[k][e] || 0) + 1; });
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
   return {
     at: Date.now(),
     photos: P.slice().reverse().slice(0, 300).map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || '') })),
-    messages: rows('Messages').reverse().slice(0, 200), votes: votes, likes: likes, cc: cc, notes: notes, pc: pc, users: users, top: top, mineIdx: mineIdx, pvIdx: pvIdx, po: po,
+    messages: rows('Messages').reverse().slice(0, 200), mr: mr, votes: votes, likes: likes, cc: cc, notes: notes, pc: pc, users: users, top: top, mineIdx: mineIdx, pvIdx: pvIdx, po: po,
     rx: R.slice(-RX_KEEP).map(r => [String(r.post), String(r.uid), String(r.date)]),
     comments: C.slice(-FEED_COMMENTS).map(c => ({ id: String(c.id), post: String(c.post), parent: String(c.parent || ''), uid: String(c.uid), text: String(c.text), date: String(c.date), media: String(c.media || '') }))
   };
@@ -205,7 +208,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {}, v0 = ver();
   if (p.v && String(p.v) === v0) return out({ ok: 1, same: 1, v: v0, now: new Date().toISOString() });   // the caller already has this exact version: send nothing else
   const s = snap();
-  if (p.scope !== 'feed') return out({ ok: 1, v: SNAPV, messages: s.messages, photos: s.photos, votes: s.votes, likes: s.likes, cc: s.cc, notes: s.notes, pc: s.pc });
+  if (p.scope !== 'feed') return out({ ok: 1, v: SNAPV, messages: s.messages, mr: s.mr || {}, photos: s.photos, votes: s.votes, likes: s.likes, cc: s.cc, notes: s.notes, pc: s.pc });
   const uid = clean(p.uid, 24);
   return out({ ok: 1, v: SNAPV, likes: s.likes, cc: s.cc, comments: s.comments, users: s.users, top: s.top, notes: s.notes, pc: s.pc,
     mine: uid ? (s.mineIdx[uid] || []) : [], pmine: uid ? (s.pvIdx[uid] || {}) : {}, nf: uid ? notifs(s, uid) : [], now: new Date().toISOString() });
@@ -353,10 +356,35 @@ const ACT = {
     const set = String(u.o.badges || '').split(',').filter(Boolean).filter(x => x !== b); if (d.on) set.push(b);
     setRow('Users', u.row, { badges: set.join(',') }); return out({ ok: 1, badges: set.join(',') });
   },
+  msgreact(d, now) {                                       // anyone: react to a wall message (emoji '' removes this device's reaction). One reaction per device per message
+    const id = clean(d.id, 40), dev = clean(d.dev, 24), em = String(d.emoji || '');
+    if (!id || !/^[a-z0-9]{6,24}$/i.test(dev)) return out({ ok: 0, error: 'noauth' });
+    if (em && MSG_EMO.indexOf(em) < 0) return out({ ok: 0, error: 'emoji' });
+    if (!find('Messages', 'id', id)) return out({ ok: 0, error: 'nomsg' });
+    const t = tab('MsgReactions'), v = t.getDataRange().getValues(), h = v[0].map(String), cm = h.indexOf('msg'), cd = h.indexOf('dev'); let row = 0;
+    for (let i = 1; i < v.length; i++) if (String(v[i][cm]) === id && String(v[i][cd]) === dev) { row = i + 1; break; }
+    if (!em) dropRows('MsgReactions', o => String(o.msg) === id && String(o.dev) === dev);
+    else if (row) setRow('MsgReactions', row, { emoji: em, date: now });
+    else put('MsgReactions', { msg: id, dev: dev, emoji: em, date: now });
+    const cnt = {}; rows('MsgReactions').forEach(r => { if (String(r.msg) === id && MSG_EMO.indexOf(String(r.emoji)) >= 0) cnt[r.emoji] = (cnt[r.emoji] || 0) + 1; });
+    patch(x => { x.mr = x.mr || {}; if (Object.keys(cnt).length) x.mr[id] = cnt; else delete x.mr[id]; });     // sets the counts (never adds), so a retry or a mid-write rebuild cannot double-count
+    return out({ ok: 1, counts: cnt });
+  },
+  pinmsg(d) {                                              // admin: pin a message to the top of the wall / unpin it (pinning one un-pins the others). Cannot change anyone's name or text
+    const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
+    const m = find('Messages', 'id', clean(d.id, 40)); if (!m) return out({ ok: 0, error: 'nomsg' });
+    if (d.pin) {                                           // only one pinned message: clear the pin column first
+      const t = tab('Messages'), c = heads(t).indexOf('pin'), lr = t.getLastRow();
+      if (c >= 0 && lr > 1) t.getRange(2, c + 1, lr - 1, 1).setNumberFormat('@').setValues(new Array(lr - 1).fill(['']));
+    }
+    setRow('Messages', m.row, { pin: d.pin ? '1' : '' });
+    return out({ ok: 1 });                                 // the public snapshot is rebuilt automatically after a write that does not patch it
+  },
   delete(d) {                                              // admin: delete a photo or an admin post (with its comments, loves, votes) or a message
     const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
     const n = d.type === 'photo' ? 'Photos' : d.type === 'note' ? 'Notes' : 'Messages', id = String(d.id);
     const gone = dropRows(n, x => String(x.id) === id);
+    if (n === 'Messages') dropRows('MsgReactions', x => String(x.msg) === id);
     if (n === 'Photos') gone.forEach(x => trashFile(x.fileId));
     if (n !== 'Messages' && gone.length) {
       const cg = dropRows('Comments', x => String(x.post) === id);
