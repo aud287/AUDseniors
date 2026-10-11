@@ -33,8 +33,9 @@ const HEAD = {
   Comments: ['id', 'post', 'parent', 'uid', 'text', 'date', 'media'],   // media: s:STICKER_NAME  or  i:DRIVE_FILE_ID
   Notes: ['id', 'kind', 'title', 'body', 'extra', 'category', 'date'],   // admin posts: text / event (occasion) / poll
   PollVotes: ['post', 'uid', 'option', 'date'],
-  MsgReactions: ['msg', 'dev', 'emoji', 'date']             // reactions on wall messages: one per device per message
+  MsgReactions: ['msg', 'dev', 'emoji', 'date']             // reactions on wall messages: a LOG (rows are only ever added). The last row of a (message, device) pair is that device's current reaction; emoji '' = removed
 };
+const MR_COMPACT = 4000;                                    // when the reaction log passes this many rows it is rewritten with only the current reactions
 const MSG_EMO = ['love', 'haha', 'sad', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
 
 /* ---------- sheet helpers (every cell is written as plain text, so nothing a visitor types can become a formula) ---------- */
@@ -86,6 +87,20 @@ function folder() { const f = DriveApp.getFoldersByName(FOLDER); return f.hasNex
 function clean(x, n) { return String(x || '').replace(/[<>]/g, '').trim().slice(0, n); }
 function limited(key, secs) { if (!key) return false; const c = CacheService.getScriptCache(), k = 'rl_' + key; if (c.get(k)) return true; c.put(k, '1', secs); return false; }
 function sha(s) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s)).map(b => ('0' + (b & 255).toString(16)).slice(-2)).join(''); }
+/* ---------- wall reactions (append-only log: a change or a removal is just one more row, so nothing is edited or deleted in place) ---------- */
+function mrFold(list) {                                   // the log -> counts per message {msg: {emoji: n}} + each device's current reaction {'msg|dev': emoji}
+  const last = {}, mr = {};
+  list.forEach(r => { last[String(r.msg) + '|' + String(r.dev)] = String(r.emoji || ''); });
+  Object.keys(last).forEach(k => { const e = last[k]; if (MSG_EMO.indexOf(e) < 0) return; const m = k.slice(0, k.lastIndexOf('|')); mr[m] = mr[m] || {}; mr[m][e] = (mr[m][e] || 0) + 1; });
+  return { last: last, mr: mr };
+}
+function mrCompact(list) {                                // keep only each device's current reaction, written in one go
+  const t = tab('MsgReactions'), h = heads(t), last = {};
+  list.forEach(r => { last[String(r.msg) + '|' + String(r.dev)] = r; });
+  const keep = Object.keys(last).map(k => last[k]).filter(r => MSG_EMO.indexOf(String(r.emoji || '')) >= 0).map(r => h.map(c => r[c] == null ? '' : String(r[c])));
+  const lr = t.getLastRow(); if (lr > 1) t.getRange(2, 1, lr - 1, h.length).clearContent();
+  if (keep.length) t.getRange(2, 1, keep.length, h.length).setNumberFormat('@').setValues(keep);
+}
 function setup() { Object.keys(HEAD).forEach(tab); folder(); Logger.log('OK: sheets + Drive folder are ready.'); }
 
 /* ---------- identity: a device profile (uid + private secret) or the admin key ---------- */
@@ -175,7 +190,7 @@ function buildSnap() {
   N.forEach(r => { if (r.kind === 'poll') { let x = {}; try { x = JSON.parse(String(r.extra || '{}')); } catch (e) {} optLen[String(r.id)] = (x.options || []).length; } });
   V.forEach(v => { const k = String(v.post), n = optLen[k], o = Number(v.option); if (!n || !(o >= 0 && o < n)) return; (pc[k] = pc[k] || new Array(n).fill(0))[o]++; (pvIdx[String(v.uid)] = pvIdx[String(v.uid)] || {})[k] = o; });
   const top = Object.keys(score).filter(u => users[u] && score[u] >= TOPFAN_MIN).sort((a, b) => score[b] - score[a]).slice(0, TOPFAN_COUNT);
-  const mr = {}; rows('MsgReactions').forEach(r => { const k = String(r.msg), e = String(r.emoji); if (MSG_EMO.indexOf(e) < 0) return; mr[k] = mr[k] || {}; mr[k][e] = (mr[k][e] || 0) + 1; });
+  const mr = mrFold(rows('MsgReactions')).mr;
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
   return {
     at: Date.now(),
@@ -361,12 +376,13 @@ const ACT = {
     if (!id || !/^[a-z0-9]{6,24}$/i.test(dev)) return out({ ok: 0, error: 'noauth' });
     if (em && MSG_EMO.indexOf(em) < 0) return out({ ok: 0, error: 'emoji' });
     if (!find('Messages', 'id', id)) return out({ ok: 0, error: 'nomsg' });
-    const t = tab('MsgReactions'), v = t.getDataRange().getValues(), h = v[0].map(String), cm = h.indexOf('msg'), cd = h.indexOf('dev'); let row = 0;
-    for (let i = 1; i < v.length; i++) if (String(v[i][cm]) === id && String(v[i][cd]) === dev) { row = i + 1; break; }
-    if (!em) dropRows('MsgReactions', o => String(o.msg) === id && String(o.dev) === dev);
-    else if (row) setRow('MsgReactions', row, { emoji: em, date: now });
-    else put('MsgReactions', { msg: id, dev: dev, emoji: em, date: now });
-    const cnt = {}; rows('MsgReactions').forEach(r => { if (String(r.msg) === id && MSG_EMO.indexOf(String(r.emoji)) >= 0) cnt[r.emoji] = (cnt[r.emoji] || 0) + 1; });
+    const list = rows('MsgReactions'), prev = mrFold(list).last[id + '|' + dev] || '';
+    if (prev !== em) {                                     // only a real change is written, and it is written as one new row at the end
+      put('MsgReactions', { msg: id, dev: dev, emoji: em, date: now });
+      list.push({ msg: id, dev: dev, emoji: em, date: now });
+      if (list.length > MR_COMPACT) mrCompact(list);
+    }
+    const cnt = mrFold(list).mr[id] || {};
     patch(x => { x.mr = x.mr || {}; if (Object.keys(cnt).length) x.mr[id] = cnt; else delete x.mr[id]; });     // sets the counts (never adds), so a retry or a mid-write rebuild cannot double-count
     return out({ ok: 1, counts: cnt });
   },

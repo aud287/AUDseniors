@@ -323,14 +323,18 @@ function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open')
  if(!was){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
   if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
 const rxDraw=id=>{const c=$('#wall .msg[data-id="'+String(id).replace(/"/g,'')+'"]'),m=msgById(id);if(c&&m)rxFoot(c,m)};
-async function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
+const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
+function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
+ if(!RXB[id])RXBASE[id]={c:Object.assign({},RX[id]||{}),m:prev};
  const k=RX[id]=RX[id]||{};if(prev&&k[prev])k[prev]=Math.max(0,k[prev]-1);if(key)k[key]=(k[key]||0)+1;
- if(key)MINE[id]=key;else delete MINE[id];saveMine();RXT[id]=Date.now();rxDraw(id);
- const r=await api({action:'msgreact',id:String(id),emoji:key,dev:DEV});
- if(r.ok&&r.counts&&(MINE[id]||'')===key){RX[id]=r.counts;rxDraw(id);return}
- if(!r.ok&&!r.demo&&(MINE[id]||'')===key){                                  // the server refused: put it back the way it was
-  if(key&&k[key])k[key]--;if(prev)k[prev]=(k[prev]||0)+1;if(prev)MINE[id]=prev;else delete MINE[id];saveMine();rxDraw(id);
-  toast(r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction. Try again.')}}
+ if(key)MINE[id]=key;else delete MINE[id];saveMine();RXT[id]=Date.now();rxDraw(id);syncRx(id)}
+/* one request at a time per message, always carrying the LATEST choice: quick taps (change, remove, change again) can never reach the server out of order */
+async function syncRx(id){if(RXB[id]){RXD[id]=1;return}RXB[id]=1;
+ try{for(;;){RXD[id]=0;const r=await api({action:'msgreact',id:String(id),emoji:MINE[id]||'',dev:DEV});
+  if(!r.ok&&!r.demo){const b=RXBASE[id];if(b){RX[id]=b.c;if(b.m)MINE[id]=b.m;else delete MINE[id];saveMine()}RXD[id]=0;rxDraw(id);console.warn('reaction not saved',r);
+   toast(r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction. Try again.'+(ADM?' ['+(r.error||'?')+(r.detail?': '+r.detail:'')+']':''),ADM?9000:undefined);return}
+  if(RXD[id])continue;if(r.counts)RX[id]=r.counts;RXT[id]=Date.now();rxDraw(id);return}}
+ finally{RXB[id]=0}}
 const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now();
  Object.keys(s).forEach(id=>{if(now-(RXT[id]||0)>2e4)RX[id]=s[id]});Object.keys(RX).forEach(id=>{if(!(id in s)&&now-(RXT[id]||0)>2e4)delete RX[id]})};
 addEventListener('click',e=>{if(!e.target.closest('#wall .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
