@@ -342,8 +342,36 @@ addEventListener('click',e=>{if(!e.target.closest('#wall .msg'))closeRx()});addE
 async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,pin:pin});
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':r.error=='nomsg'?'That message no longer exists.':'Not saved. Check the admin key.');return}
  if(pin)MSG.forEach(x=>{x.pin=''});m.pin=pin?'1':'';msgs(MSG,pin?'top':undefined);toast(pin?'Pinned to the top.':'Unpinned.')}
+/* ---- staff badges: the class logo used like a verification mark. Tap it -> a tiny popup says who it is. Image files come from config.js (founderBadge / teamBadge) ---- */
+const BADGES={founder:{label:'المؤسس',cfg:'founderBadge'},team:{label:'تيم التخرج',cfg:'teamBadge'}};
+function vBadge(k){const d=BADGES[k],u=DR(G(d.cfg),1),use=safe(u)?u:CONFIG.logo,b=el('button','vbadge '+k),w=el('span','vi');
+ b.type='button';b.setAttribute('aria-label',d.label);b.setAttribute('aria-expanded','false');
+ if(ok(use)){const i=new Image();i.src=use;i.alt='';i.decoding='async';w.append(i)}else w.append(el('span','vt','✓'));      // no image at all: a plain check mark
+ b.append(w);b.onclick=ev=>{ev.stopPropagation();bdPop(b,d.label)};return b}
+let bdBtn=null,bdT=0;
+function closeBd(){const p=$('#bdpop');if(p)p.hidden=true;if(bdBtn){bdBtn.setAttribute('aria-expanded','false');bdBtn=null}clearTimeout(bdT)}
+function bdPop(b,label){if(bdBtn===b){closeBd();return}closeBd();let p=$('#bdpop');
+ if(!p){p=el('div','bdpop');p.id='bdpop';p.setAttribute('role','tooltip');document.body.append(p)}
+ p.textContent=label;p.hidden=false;const r=b.getBoundingClientRect(),w=p.offsetWidth;                         // fixed to the screen, so the scrolling message box can never clip it
+ p.style.left=Math.round(Math.min(innerWidth-w-8,Math.max(8,r.left+r.width/2-w/2)))+'px';p.style.top=Math.round(r.bottom+8)+'px';
+ bdBtn=b;b.setAttribute('aria-expanded','true');bdT=setTimeout(closeBd,3500)}
+addEventListener('click',e=>{if(!e.target.closest('.vbadge'))closeBd()});addEventListener('keydown',e=>{if(e.key=='Escape')closeBd()});
+addEventListener('scroll',closeBd,{passive:true,capture:true});addEventListener('resize',closeBd);
+/* ---- visitor messages on / off. The BACKEND is the real lock; this only shows it. Staff can always post. ---- */
+function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('#mlocknote'),bar=$('#mlockbar');
+ f.classList.toggle('paused',stop);[$('#mn'),$('#mt'),f.querySelector('button')].forEach(x=>{if(x)x.disabled=stop});
+ note.replaceChildren();
+ if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
+ else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
+ note.hidden=!note.childNodes.length;
+ if(bar){bar.hidden=ROLE!=='founder';$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
+$('#mlock').onclick=async()=>{if(ROLE!=='founder')return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
+ const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
+ if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
+ MLOCK=r.demo?want:!!r.locked;msgForm();toast(MLOCK?'Visitor messages are paused.':'Visitor messages are open again.')};
 function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,240),t=new Date(m.date),okd=!!m.date&&!isNaN(t);
  const c=el('article','msg a'+(i%3)+(isPin(m)?' pinned':'')),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
+ if(m.badge==='founder'||m.badge==='team'){who.classList.add('vb');who.dir=/[\u0600-\u06FF]/.test(nm)?'rtl':'ltr';who.append(vBadge(m.badge))}      // founder / graduation-team mark right beside the name
  /* header: date + time stacked on the LEFT (plain text), the sender's name on the RIGHT (any language) */
  if(okd){const wh=el('div','when'),tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);
   wh.append(el('small','mdt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
@@ -366,11 +394,11 @@ function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),st=w.scrollTop;w.rep
 $('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
-$('#mf').onsubmit=async e=>{e.preventDefault();const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
- const form=e.target,btn=form.querySelector('button'),tmp={name:n,message:t,date:new Date().toISOString()};
+$('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
+ const form=e.target,btn=form.querySelector('button'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
  if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();       // shown right away; the server catches up in the background
- const r=await api({action:'message',name:n,message:t});if(btn)btn.disabled=false;
- if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;return toast(errText(r.error))}
+ const r=await api(ADM?{action:'message',name:n,message:t,key:ADK}:{action:'message',name:n,message:t});if(btn)btn.disabled=false;
+ if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(r.error=='locked'){MLOCK=true;msgForm()}return toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
 /* ---- events ---- */
@@ -500,7 +528,7 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -529,24 +557,30 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
  ph.forEach((p,i)=>{o.push(p);if(i%3==2&&ev.length)o.push(ev.shift())});return o.concat(ev)}
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
-let ADM=false,ADK='',AS='official';try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
+let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
 async function del(type,id){const what=type=='photo'?'photo':type=='note'?'post':'message';
  if(!await ask('Delete this '+what+'?','It disappears for everyone'+(type=='message'?'.':', along with its comments and loves.')))return;
  const r=await api({action:'delete',type,id,key:ADK});if(!r.ok){toast('Not deleted. Check the admin key.');return}
  if(type=='photo'){MEM=MEM.filter(m=>m.id!=id);board()}else{MSG=MSG.filter(m=>m.id!=id);msgs(MSG)}
  toast('Deleted.')}
-async function adminInit(){let k='';try{k=sessionStorage.getItem('adk')||''}catch(e){}
- if(location.hash=='#admin'&&!k)k=prompt('Admin key')||'';if(!k)return;
+/* staff links: yoursite/#admin (graduation team) and yoursite/#founder (the founder). Each asks for its own key; the BACKEND decides who the key belongs to (ROLE).
+   Both can delete photos / messages and pin; only the founder sees the "pause visitor messages" switch. Messages sent from a staff link carry a badge. */
+async function adminInit(){const want=location.hash=='#founder'?'founder':location.hash=='#admin'?'admin':'';let k='';
+ try{k=sessionStorage.getItem('adk')||'';const sr=sessionStorage.getItem('adr')||'';if(want&&sr&&sr!==want)k=''}catch(e){}      // opened the other staff link in the same tab: ask again
+ if(want&&!k)k=prompt(want=='founder'?'Founder key':'Admin key')||'';if(!k)return;
  const r=await api({action:'auth',key:k});
- if(r.ok||r.demo){ADM=true;ADK=k;try{sessionStorage.setItem('adk',k)}catch(e){}document.body.classList.add('adm');toast(r.demo?'Admin mode (demo: connect the Backend link).':'Admin mode is on.');}
- else{try{sessionStorage.removeItem('adk')}catch(e){}toast(r.error=='unset'?'Change ADMIN_KEY in Code.gs first.':'Admin key not accepted.')}}
+ if(r.ok||r.demo){ADM=true;ADK=k;ROLE=r.role||want||'admin';MLOCK=!!r.locked;try{sessionStorage.setItem('adk',k);sessionStorage.setItem('adr',ROLE)}catch(e){}
+  document.body.classList.add('adm');document.body.classList.toggle('founder',ROLE=='founder');msgForm();
+  toast(r.demo?'Staff mode (demo: connect the Backend link).':ROLE=='founder'?'Founder mode is on.':'Admin mode is on.')}
+ else{try{sessionStorage.removeItem('adk');sessionStorage.removeItem('adr')}catch(e){}toast(r.error=='unset'?'Change ADMIN_KEY / FOUNDER_KEY in Code.gs first.':'Key not accepted.')}}
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
- const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'']),rp.mr||{}]));
+ const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'',m.badge||'']),rp.mr||{}]));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
+  const lk=!!rp.locked;if(lk!==MLOCK){MLOCK=lk;msgForm()}
   mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?(rp.messages||[]):MESSAGES;msgs(MSG)}
   const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
   const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device

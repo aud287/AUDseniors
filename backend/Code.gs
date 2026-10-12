@@ -2,7 +2,8 @@
    Run setup() once (authorize), then Deploy > New deployment > Web app (Execute as: Me, Access: Anyone).
    After pasting a NEW version of this file: keep your own ADMIN_KEY, run setup() again, then
    Deploy > Manage deployments > Edit > New version. */
-const ADMIN_KEY = 'CHANGE_THIS_SECRET';   // your secret; used at  yoursite/#admin  (admin tools, official page, delete anything)
+const ADMIN_KEY = 'CHANGE_THIS_SECRET';   // the graduation team's secret; used at  yoursite/#admin  (admin tools, official page, delete anything)
+const FOUNDER_KEY = 'CHANGE_THIS_FOUNDER_SECRET';   // the FOUNDER's own secret, used at  yoursite/#founder . It must be a DIFFERENT value from ADMIN_KEY. Same powers as the admin, plus: pause / resume visitor messages
 const FOLDER = 'Class2026 Photos';        // Drive folder (created automatically)
 const MAX_B64 = 4000000;                  // max photo size (base64 chars)
 const MAX_AVATAR = 400000;                // max profile-picture size (base64 chars)
@@ -25,7 +26,7 @@ const CHUNK = 30000;                      // cache chunk size (a cache value is 
 const THEMES = ['wine', 'gold', 'sky', 'mint'];   // looks of an admin text post
 const RESERVED = ['admin', 'administrator', 'official', 'moderator', 'support', 'ادمن', 'الادمن', 'مشرف', 'الادارة', 'ادارة']; // add your class page name here
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date', 'pin'],                   // pin: '1' = pinned to the top of the wall (only one at a time)
+  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge'],          // pin: '1' = pinned to the top of the wall (only one at a time) · badge: 'founder' | 'team' (posted from the founder / admin link) | '' (visitor)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid'],
   Votes: ['poll', 'option', 'date'],
   Users: ['uid', 'name', 'nameKey', 'sk', 'avatar', 'badges', 'ne', 'avatarAt', 'date'],
@@ -33,6 +34,7 @@ const HEAD = {
   Comments: ['id', 'post', 'parent', 'uid', 'text', 'date', 'media'],   // media: s:STICKER_NAME  or  i:DRIVE_FILE_ID
   Notes: ['id', 'kind', 'title', 'body', 'extra', 'category', 'date'],   // admin posts: text / event (occasion) / poll
   PollVotes: ['post', 'uid', 'option', 'date'],
+  Settings: ['key', 'value'],                               // site switches that must survive a restart (msgLock = '1' while visitor messages are paused)
   MsgReactions: ['msg', 'dev', 'emoji', 'date']             // reactions on wall messages: a LOG (rows are only ever added). The last row of a (message, device) pair is that device's current reaction; emoji '' = removed
 };
 const MR_COMPACT = 4000;                                    // when the reaction log passes this many rows it is rewritten with only the current reactions
@@ -104,10 +106,19 @@ function mrCompact(list) {                                // keep only each devi
 function setup() { Object.keys(HEAD).forEach(tab); folder(); Logger.log('OK: sheets + Drive folder are ready.'); }
 
 /* ---------- identity: a device profile (uid + private secret) or the admin key ---------- */
-function adminState(k) {                                  // 'ok' | 'key' (wrong key) | 'unset' (the default ADMIN_KEY was not changed)
-  if (ADMIN_KEY === 'CHANGE_THIS_SECRET') return 'unset';
-  return k && String(k) === ADMIN_KEY ? 'ok' : 'key';
+const DEF_ADMIN = 'CHANGE_THIS_SECRET', DEF_FOUNDER = 'CHANGE_THIS_FOUNDER_SECRET';
+function role(k) {                                       // whose key is this?  'founder' | 'admin' | ''.  A default (unchanged) key never works, and the founder key must differ from the admin key
+  k = String(k || ''); if (!k) return '';
+  if (FOUNDER_KEY !== DEF_FOUNDER && FOUNDER_KEY !== ADMIN_KEY && k === FOUNDER_KEY) return 'founder';
+  if (ADMIN_KEY !== DEF_ADMIN && k === ADMIN_KEY) return 'admin';
+  return '';
 }
+function adminState(k) {                                 // 'ok' (admin OR founder: every moderation power) | 'key' (wrong key) | 'unset' (no key was changed from its default)
+  if (role(k)) return 'ok';
+  return ADMIN_KEY === DEF_ADMIN && FOUNDER_KEY === DEF_FOUNDER ? 'unset' : 'key';
+}
+function lockOn() { const f = find('Settings', 'key', 'msgLock'); return !!f && String(f.o.value) === '1'; }          // are visitor messages paused?
+function setLock(on) { const f = find('Settings', 'key', 'msgLock'), v = on ? '1' : '0'; if (f) setRow('Settings', f.row, { value: v }); else put('Settings', { key: 'msgLock', value: v }); }
 function adminOk(k) { return adminState(k) === 'ok'; }
 function authUser(d) { if (!d.uid || !d.sk) return null; const f = find('Users', 'uid', d.uid); return f && String(f.o.sk) === sha(d.sk) ? f : null; }
 function actor(d) {                                       // -> {uid} | {err}
@@ -193,7 +204,7 @@ function buildSnap() {
   const mr = mrFold(rows('MsgReactions')).mr;
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
   return {
-    at: Date.now(),
+    at: Date.now(), locked: lockOn() ? 1 : 0,
     photos: P.slice().reverse().slice(0, 300).map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || '') })),
     messages: rows('Messages').reverse().slice(0, 200), mr: mr, votes: votes, likes: likes, cc: cc, notes: notes, pc: pc, users: users, top: top, mineIdx: mineIdx, pvIdx: pvIdx, po: po,
     rx: R.slice(-RX_KEEP).map(r => [String(r.post), String(r.uid), String(r.date)]),
@@ -223,7 +234,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {}, v0 = ver();
   if (p.v && String(p.v) === v0) return out({ ok: 1, same: 1, v: v0, now: new Date().toISOString() });   // the caller already has this exact version: send nothing else
   const s = snap();
-  if (p.scope !== 'feed') return out({ ok: 1, v: SNAPV, messages: s.messages, mr: s.mr || {}, photos: s.photos, votes: s.votes, likes: s.likes, cc: s.cc, notes: s.notes, pc: s.pc });
+  if (p.scope !== 'feed') return out({ ok: 1, v: SNAPV, locked: s.locked ? 1 : 0, messages: s.messages, mr: s.mr || {}, photos: s.photos, votes: s.votes, likes: s.likes, cc: s.cc, notes: s.notes, pc: s.pc });
   const uid = clean(p.uid, 24);
   return out({ ok: 1, v: SNAPV, likes: s.likes, cc: s.cc, comments: s.comments, users: s.users, top: s.top, notes: s.notes, pc: s.pc,
     mine: uid ? (s.mineIdx[uid] || []) : [], pmine: uid ? (s.pvIdx[uid] || {}) : {}, nf: uid ? notifs(s, uid) : [], now: new Date().toISOString() });
@@ -250,10 +261,15 @@ function doPost(e) {
   finally { lock.releaseLock(); }
 }
 const ACT = {
-  message(d, now, id) {
-    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now };
+  message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
+    const r = d.key ? role(d.key) : '';
+    if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
+    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '' };
     if (!it.name || !it.message) return out({ ok: 0, error: 'empty' });
-    if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    if (!r) {                                                                         // visitors only: closed while the founder has paused messages
+      if (lockOn()) return out({ ok: 0, error: 'locked' });
+      if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    }
     put('Messages', it);
     patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(it); x.messages = x.messages.slice(0, 200); });
     return out({ ok: 1, item: it });
@@ -279,7 +295,13 @@ const ACT = {
     patch(x => { const k = poll + '_' + option; x.votes[k] = (x.votes[k] || 0) + 1; });
     return out({ ok: 1 });
   },
-  auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1 } : { ok: 0, error: s }); },
+  auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0 } : { ok: 0, error: s }); },
+  msglock(d) {                                             // FOUNDER only: pause / resume messages from visitors (the admin and the founder can still post)
+    if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
+    const on = d.on === true || d.on === 1 || d.on === '1';
+    setLock(on);
+    return out({ ok: 1, locked: on ? 1 : 0 });             // not a snapshot patch, so the cached public data is rebuilt on the next read
+  },
   me(d) { const f = authUser(d); return out(f ? { ok: 1, user: pub(f.o) } : { ok: 0, error: find('Users', 'uid', d.uid) ? 'noauth' : 'unknown' }); },
   profile(d, now) {                                        // create (first time) or edit: username once, picture every AVATAR_DAYS days
     const uid = clean(d.uid, 24), sk = String(d.sk || ''); if (uid.length < 8 || sk.length < 16 || uid === 'official') return out({ ok: 0, error: 'bad' });
