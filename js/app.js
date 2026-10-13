@@ -312,7 +312,7 @@ const msgById=id=>MSG.find(x=>String(x.id)===String(id));
 let REPLIES={};                                          // message id -> how many replies it has (rebuilt on every render)
 const ICO_REPLY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>';
 function icoReply(){const t=document.createElement('template');t.innerHTML=ICO_REPLY;return t.content.firstChild}
-const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,30).join('')+(a.length>30?'…':'')};      // first 30 characters of the original (emoji-safe)
+const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,30).join('')+(a.length>90?'…':'')};      // first 30 characters of the original (emoji-safe)
 function setReply(r){REPLY=r||null;const b=$('#mreply');if(!b)return;b.hidden=!REPLY;if(REPLY){b.querySelector('.rpbar-n').textContent=REPLY.name;b.querySelector('.rpbar-t').textContent=REPLY.text?'· '+REPLY.text:''}}
 $('#mreplyx').onclick=()=>{setReply(null);try{$('#mt').focus({preventScroll:true})}catch(e){}};      // the ✕ on the "Replying to" bar
 function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)return;
