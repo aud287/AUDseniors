@@ -26,7 +26,7 @@ const CHUNK = 30000;                      // cache chunk size (a cache value is 
 const THEMES = ['wine', 'gold', 'sky', 'mint'];   // looks of an admin text post
 const RESERVED = ['admin', 'administrator', 'official', 'moderator', 'support', 'ادمن', 'الادمن', 'مشرف', 'الادارة', 'ادارة']; // add your class page name here
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge'],          // pin: '1' = pinned to the top of the wall (only one at a time) · badge: 'founder' | 'team' (posted from the founder / admin link) | '' (visitor)
+  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext'],   // pin: '1' = pinned to the top of the wall (only one at a time) · badge: 'founder' | 'team' (posted from the founder / admin link) | '' (visitor) · reply = id of the message this one answers, rname / rtext = that message's name + first 30 characters (copied at reply time, so the preview survives even if the original is deleted)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid'],
   Votes: ['poll', 'option', 'date'],
   Users: ['uid', 'name', 'nameKey', 'sk', 'avatar', 'badges', 'ne', 'avatarAt', 'date'],
@@ -264,12 +264,16 @@ const ACT = {
   message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
     const r = d.key ? role(d.key) : '';
     if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
-    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '' };
+    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '' };
     if (!it.name || !it.message) return out({ ok: 0, error: 'empty' });
-    if (!r) {                                                                         // visitors only: closed while the founder has paused messages
-      if (lockOn()) return out({ ok: 0, error: 'locked' });
-      if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    if (!r && lockOn()) return out({ ok: 0, error: 'locked' });                       // visitors only: closed while the founder has paused messages
+    if (d.reply) {                                                                    // a reply is a normal new message + a link to the original; the preview comes from the REAL original, never from what the browser sends
+      const f = find('Messages', 'id', String(d.reply).slice(0, 60));
+      if (!f) return out({ ok: 0, error: 'gone' });                                   // the original was deleted meanwhile
+      const a = Array.from(String(f.o.message || '').replace(/\s+/g, ' ').trim());
+      it.reply = String(f.o.id); it.rname = clean(f.o.name, 30); it.rtext = a.slice(0, 30).join('') + (a.length > 30 ? '…' : '');
     }
+    if (!r && limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     put('Messages', it);
     patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(it); x.messages = x.messages.slice(0, 200); });
     return out({ ok: 1, item: it });

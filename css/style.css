@@ -1303,7 +1303,7 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .who.vb b{flex:0 1 auto;min-width:0}
 .vbadge{position:relative;flex:none;display:block;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;transition:transform .25s var(--e)}
 .vbadge:before{content:"";position:absolute;inset:-8px}
-.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;}
+.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#fff;box-shadow:0 0 0 1.5px var(--gold),0 2px 6px #6b1a2e40}
 .vbadge img{display:block;width:100%;height:100%;object-fit:cover}
 .vbadge .vt{display:grid;place-items:center;width:100%;height:100%;background:var(--gold);color:var(--ink);font:900 14px/1 'DM Sans',sans-serif}
 .vbadge:hover{transform:scale(1.12)}
@@ -1319,3 +1319,25 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .mlockbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;max-width:760px;margin:0 auto 14px;padding:10px 14px;border-radius:16px;background:#ffffffa6;border:1.5px solid var(--gold);font-weight:700;font-size:13px;color:var(--wine)}
 .mlockbar.off{border-color:#c62828;background:#ffeeee}
 .mlockbar .btn{padding:9px 18px;font-size:12px}
+
+/* ===== replies ===== */
+.rpl{display:block;width:100%;max-width:100%;margin:0 0 9px;padding:5px 10px;border:0;border-right:3px solid var(--gold);border-radius:8px;background:#8f24400f;color:var(--wine);font:600 11.5px/1.5 'DM Sans',var(--ar),sans-serif;text-align:right;direction:ltr;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:background .2s}
+.rpl:hover,.rpl:focus-visible{background:#8f244021}
+.rpl:focus-visible{outline:2px solid var(--or);outline-offset:1px}
+.rpl svg{width:12px;height:12px;vertical-align:-1.5px;opacity:.85}
+.rpl b{font-weight:800}
+.adm .msg .rpl{width:calc(100% - 76px)}
+.rpc{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px 0 7px;border-radius:99px;border:1px solid #8f244030;background:#8f24400f;color:var(--wine);font:700 12px/1 'DM Sans',sans-serif;cursor:default;animation:rxPop .35s var(--e) backwards}
+.rpc svg{width:13px;height:13px}
+.rxp .rpb{position:relative;margin-left:4px;color:var(--wine)}
+.rxp .rpb:before{content:"";position:absolute;left:-3px;top:6px;bottom:6px;width:1px;background:#8f244033}
+.rxp .rpb svg{width:16px;height:16px}
+.msg.flash{box-shadow:0 0 0 3px var(--gold),0 12px 28px #c8a25a66}
+.rpbar{display:flex;align-items:center;gap:7px;margin:0 0 12px;padding:7px 8px 7px 12px;border-radius:12px;border-left:3px solid var(--gold);background:#8f24400f;font-size:12.5px;color:var(--wine);min-width:0}
+.rpbar[hidden]{display:none}
+.rpbar-l{flex:none;font-weight:700}
+.rpbar-n{flex:0 1 auto;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800}
+.rpbar-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
+.rpbar-x{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;color:var(--wine);font-size:12px;line-height:1;cursor:pointer;transition:background .2s}
+.rpbar-x:hover,.rpbar-x:focus-visible{background:#8f24401f}
+@media(prefers-reduced-motion:reduce){.rpc{animation:none}}

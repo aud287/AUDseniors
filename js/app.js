@@ -293,8 +293,8 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
    v[i]++;pollSeen[k]=v[i];pollPut(p.q,i,o[0]);lock(i,1);api({action:'vote',poll:pi,option:i})};c.append(b)});
  c.append(m);w.append(c);const j=saved();if(j>=0)lock(j,0)})}
 
-/* ---- messages: one scroll box that shows 6 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
-let msgSort='new',msgFirst=true;const MSG_SHOW=6;
+/* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
+let msgSort='new',msgFirst=true;const MSG_SHOW=4;
 const isPin=m=>String(m.pin)==='1';                    // pinned message: always first, and it stays on screen while the wall scrolls
 const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{if(isPin(a)!==isPin(b))return isPin(a)?-1:1;const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -307,15 +307,40 @@ const DEV=(()=>{try{let d=localStorage.getItem('aud_dev');if(!d){d=Array.from(cr
 let RX={};const RXT={},MINE=(()=>{try{return JSON.parse(localStorage.getItem('aud_mrx')||'{}')||{}}catch(e){return{}}})();      // RX: message id -> {love:n,...} · RXT: when I last changed it (a refresh cannot flicker it back for 20 s)
 const saveMine=()=>{try{localStorage.setItem('aud_mrx',JSON.stringify(MINE))}catch(e){}};
 const msgById=id=>MSG.find(x=>String(x.id)===String(id));
+/* ---- replies: a reply is a brand-new message that remembers which message it answers. Tap a note -> the picker (reactions + a reply arrow) -> the form says who you are answering.
+   The new note shows a small "Reply to NAME · first 30 characters" line above its name (tap it to jump to the original); the original gets a small reply icon + count left of its reactions. ---- */
+let REPLIES={};                                          // message id -> how many replies it has (rebuilt on every render)
+const ICO_REPLY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>';
+function icoReply(){const t=document.createElement('template');t.innerHTML=ICO_REPLY;return t.content.firstChild}
+const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,30).join('')+(a.length>30?'…':'')};      // first 30 characters of the original (emoji-safe)
+function setReply(r){REPLY=r||null;const b=$('#mreply');if(!b)return;b.hidden=!REPLY;if(REPLY){b.querySelector('.rpbar-n').textContent=REPLY.name;b.querySelector('.rpbar-t').textContent=REPLY.text?'· '+REPLY.text:''}}
+$('#mreplyx').onclick=()=>{setReply(null);try{$('#mt').focus({preventScroll:true})}catch(e){}};      // the ✕ on the "Replying to" bar
+function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)return;
+ setReply({id:String(m.id),name:clean(m.name,30)||'Anonymous',text:exc30(m.message)});
+ try{($('#mn').value?$('#mt'):$('#mn')).focus({preventScroll:true})}catch(e){}                       // inside the tap, so phones open the keyboard
+ $('#mf').scrollIntoView({behavior:'smooth',block:'center'})}
+function goMsg(id){const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q);
+ if(!c)return toast(errText('gone'));closeRx();const w=$('#wall'),box=c.closest('#pinwrap')||w;
+ if(w.contains(c))w.scrollTo({top:Math.max(0,c.offsetTop-14),behavior:'smooth'});
+ const r=box.getBoundingClientRect();if(r.top<70||r.bottom>innerHeight-30)box.scrollIntoView({behavior:'smooth',block:'center'});      // bring the box itself on screen if it is not
+ c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1900)}
+function replyLine(m){const b=el('button','rpl'),n=el('bdi');b.type='button';b.setAttribute('aria-label','Go to the message this replies to');
+ n.append(el('b','',clean(m.rname,30)||'Anonymous'));b.append(icoReply(),document.createTextNode(' Reply to '),n);
+ if(m.rtext)b.append(document.createTextNode(' · '),el('bdi','',clean(m.rtext,40)));
+ b.onclick=ev=>{ev.stopPropagation();goMsg(m.reply)};return b}
 function rxFoot(c,m){let f=c.querySelector('.mrx');if(!f){f=el('div','mrx');c.append(f)}
  f.replaceChildren();if(!m.id){f.hidden=true;return}
- const k=RX[m.id]||{},mine=MINE[m.id]||'',open=c.classList.contains('rx-open');
+ const k=RX[m.id]||{},mine=MINE[m.id]||'',open=c.classList.contains('rx-open'),rc=REPLIES[m.id]||0;
+ if(rc){const s=el('span','rpc');s.title=rc+(rc==1?' reply':' replies');s.setAttribute('role','img');s.setAttribute('aria-label',rc+(rc==1?' reply':' replies'));s.append(icoReply(),el('span','n',rc));f.append(s)}      // "this was replied to" + how many: leftmost, only when someone replied
  RXS.forEach(([key,em,label])=>{const n=k[key]||0;if(!n)return;
   const b=el('button','rxc'+(mine==key?' me':''));b.type='button';b.title=label;b.setAttribute('aria-pressed',String(mine==key));b.setAttribute('aria-label',label+': '+n);
   b.append(el('span','e',em),el('span','n',n));b.onclick=ev=>{ev.stopPropagation();react(m,mine==key?'':key)};f.append(b)});
  if(open){const p=el('div','rxp');p.setAttribute('role','group');p.setAttribute('aria-label','Choose a reaction');
   RXS.forEach(([key,em,label])=>{const b=el('button',mine==key?'on':'',em);b.type='button';b.title=label;b.setAttribute('aria-label',label);
-   b.onclick=ev=>{ev.stopPropagation();c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');react(m,mine==key?'':key)};p.append(b)});f.append(p)}
+   b.onclick=ev=>{ev.stopPropagation();c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');react(m,mine==key?'':key)};p.append(b)});
+  if(!(MLOCK&&!ADM)){const rb=el('button','rpb');rb.type='button';rb.title='Reply';rb.setAttribute('aria-label','Reply to this message');rb.append(icoReply());      // same rounded box as the reactions
+   rb.onclick=ev=>{ev.stopPropagation();c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');rxFoot(c,m);startReply(m)};p.append(rb)}
+  f.append(p)}
  f.hidden=!f.childNodes.length}
 function closeRx(except){$$('#pinwrap .msg.rx-open,#wall .msg.rx-open').forEach(c=>{if(c===except)return;c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');const m=msgById(c.dataset.id);if(m)rxFoot(c,m)})}
 function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open');closeRx(c);
@@ -359,7 +384,7 @@ addEventListener('click',e=>{if(!e.target.closest('.vbadge'))closeBd()});addEven
 addEventListener('scroll',closeBd,{passive:true,capture:true});addEventListener('resize',closeBd);
 /* ---- visitor messages on / off. The BACKEND is the real lock; this only shows it. Staff can always post. ---- */
 function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('#mlocknote'),bar=$('#mlockbar');
- f.classList.toggle('paused',stop);[$('#mn'),$('#mt'),f.querySelector('button')].forEach(x=>{if(x)x.disabled=stop});
+ f.classList.toggle('paused',stop);[$('#mn'),$('#mt'),f.querySelector('.btn')].forEach(x=>{if(x)x.disabled=stop});if(stop)setReply(null);
  note.replaceChildren();
  if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
  else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
@@ -376,10 +401,11 @@ function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,
  if(okd){const wh=el('div','when'),tm=el('small','tm'),ag=el('span','ago'),a=agoTxt(t);ag.dataset.t=+t;ag.textContent=a?' · '+a:'';tm.append(el('span','',tmFmt(t)),ag);
   wh.append(el('small','mdt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
  hd.append(who);
- const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';if(isPin(m))c.append(el('small','pinb','\uD83D\uDCCC PINNED'));c.append(hd,p);return c}
+ const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';if(isPin(m))c.append(el('small','pinb','\uD83D\uDCCC PINNED'));if(m.reply)c.append(replyLine(m));c.append(hd,p);return c}
 function fitWall(){const w=$('#wall'),k=w.children,n=MSG_SHOW-($('#pinwrap').hidden?0:1);w.style.maxHeight='';if(k.length<=n||!k[n].classList.contains('msg'))return;      // a pinned note sits above the box and takes one of the slots
  const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[n].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
 function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=w.scrollTop;w.replaceChildren();pw.replaceChildren();
+ REPLIES={};all.forEach(x=>{if(x.reply)REPLIES[x.reply]=(REPLIES[x.reply]||0)+1});
  if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
  all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
   if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
@@ -395,10 +421,11 @@ $('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
 $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
- const form=e.target,btn=form.querySelector('button'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
- if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();       // shown right away; the server catches up in the background
- const r=await api(ADM?{action:'message',name:n,message:t,key:ADK}:{action:'message',name:n,message:t});if(btn)btn.disabled=false;
- if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(r.error=='locked'){MLOCK=true;msgForm()}return toast(errText(r.error))}
+ const rp=REPLY,form=e.target,btn=form.querySelector('.btn'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
+ if(rp){tmp.reply=rp.id;tmp.rname=rp.name;tmp.rtext=rp.text}
+ if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
+ const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await api(pl);if(btn)btn.disabled=false;
+ if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
 /* ---- events ---- */
@@ -528,7 +555,7 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -557,7 +584,7 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
  ph.forEach((p,i)=>{o.push(p);if(i%3==2&&ev.length)o.push(ev.shift())});return o.concat(ev)}
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
-let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
+let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
 async function del(type,id){const what=type=='photo'?'photo':type=='note'?'post':'message';
  if(!await ask('Delete this '+what+'?','It disappears for everyone'+(type=='message'?'.':', along with its comments and loves.')))return;
  const r=await api({action:'delete',type,id,key:ADK});if(!r.ok){toast('Not deleted. Check the admin key.');return}
