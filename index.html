@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 <link rel="preconnect" href="https://lh3.googleusercontent.com">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
 <!-- Fonts + Font Awesome load without blocking first paint; text still renders (system font) then swaps in -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=DM+Sans:wght@400;600;700&family=Playfair+Display:wght@700;900&family=Playpen+Sans+Arabic:wght@100..800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
@@ -85,6 +85,7 @@
 
 <section id="messages" class="rv"><h2>LEAVE A PIECE OF YOURSELF</h2>
 <div class="chips-wrap"><p class="sub" style="margin:0">Messages from the class. New notes appear right away.</p><select id="msort" class="sortsel" aria-label="Sort messages"><option value="new">Newest first</option><option value="old">Oldest first</option></select></div>
+<div class="pinwrap" id="pinwrap" hidden></div>
 <div class="wall" id="wall" role="region" aria-label="Messages from the class"></div>
 <div class="row"><span id="mcnt" class="cnt"></span></div>
 <div class="mlockbar" id="mlockbar" hidden><span id="mlockst"></span><button type="button" class="btn g" id="mlock"></button></div>
@@ -112,7 +113,7 @@
 <h3 id="askt">Delete this?</h3><p class="sh-sub" id="askp"></p>
 <div class="sh-a"><button class="btn dng" value="ok">DELETE</button><button class="btn g" value="no">KEEP IT</button></div>
 </form></dialog>
-<script src="js/config.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/config.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>

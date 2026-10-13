@@ -91,7 +91,7 @@ h2{font-size:clamp(30px,6vw,54px)}.sub{opacity:.75;margin:6px 0 20px}
 .em{display:grid;place-items:center}
 .tag{position:absolute;top:16px;left:16px;z-index:2;background:var(--wine);color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;opacity:0;transform:translateY(-6px);transition:.35s var(--e)}
 .pol:hover .tag,.pol:focus-visible .tag{opacity:1;transform:none}
-.cap{font:400 14px / 1.35 Caveat, var(--ar), cursive;padding-top:6px}.dt{font-size:10px;letter-spacing:.1em;opacity:.6}
+.cap{font:600 20px/1.05 Caveat,var(--ar),cursive;padding-top:6px}.dt{font-size:10px;letter-spacing:.1em;opacity:.6}
 .note{padding:18px 12px 14px;background:linear-gradient(225deg,#e9d98a 0 16px,#fff6bf 16px)}
 .note .em{display:block;font-size:30px}.note small{display:block;font-weight:700;letter-spacing:.1em;color:var(--bur);font-size:11px}
 .note b{display:block;font:600 24px/1 Caveat,var(--ar),cursive}
@@ -1291,8 +1291,8 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .rxp button.on{background:#f7e4a8}
 @keyframes rxPop{from{opacity:0;transform:scale(.7)}}
 .pinb{display:block;margin:0 0 8px;font:700 10.5px/1 'DM Sans',sans-serif;letter-spacing:.14em;color:var(--wine)}
-.wall .msg.pinned{position:sticky;top:-14px;z-index:20;border-color:var(--ac);box-shadow:0 10px 24px #6b1a2e33}
-.wall.hp{-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 26px),transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 26px),transparent 100%)}
+.pinwrap{box-sizing:border-box;max-width:760px;margin:0 auto;padding:14px 12px 0}.pinwrap[hidden]{display:none}
+.pinwrap .msg.pinned{border-color:var(--ac);box-shadow:0 10px 24px #6b1a2e33}
 .mbtn{display:none;position:absolute;top:6px;z-index:8;width:30px;height:30px;border-radius:50%;place-items:center;background:var(--wine);color:#fff;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 4px 8px #0006}
 .adm .mbtn{display:grid}.mbtn.mp{right:42px}.mbtn.mp.on{background:var(--gold);color:var(--ink)}
 @media(prefers-reduced-motion:reduce){.rxc,.rxp{animation:none}}
@@ -1303,7 +1303,7 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .who.vb b{flex:0 1 auto;min-width:0}
 .vbadge{position:relative;flex:none;display:block;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;transition:transform .25s var(--e)}
 .vbadge:before{content:"";position:absolute;inset:-8px}
-.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;}
+.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#fff;box-shadow:0 0 0 1.5px var(--gold),0 2px 6px #6b1a2e40}
 .vbadge img{display:block;width:100%;height:100%;object-fit:cover}
 .vbadge .vt{display:grid;place-items:center;width:100%;height:100%;background:var(--gold);color:var(--ink);font:900 14px/1 'DM Sans',sans-serif}
 .vbadge:hover{transform:scale(1.12)}

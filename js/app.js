@@ -317,12 +317,12 @@ function rxFoot(c,m){let f=c.querySelector('.mrx');if(!f){f=el('div','mrx');c.ap
   RXS.forEach(([key,em,label])=>{const b=el('button',mine==key?'on':'',em);b.type='button';b.title=label;b.setAttribute('aria-label',label);
    b.onclick=ev=>{ev.stopPropagation();c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');react(m,mine==key?'':key)};p.append(b)});f.append(p)}
  f.hidden=!f.childNodes.length}
-function closeRx(except){$$('#wall .msg.rx-open').forEach(c=>{if(c===except)return;c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');const m=msgById(c.dataset.id);if(m)rxFoot(c,m)})}
+function closeRx(except){$$('#pinwrap .msg.rx-open,#wall .msg.rx-open').forEach(c=>{if(c===except)return;c.classList.remove('rx-open');c.setAttribute('aria-expanded','false');const m=msgById(c.dataset.id);if(m)rxFoot(c,m)})}
 function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open');closeRx(c);
  c.classList.toggle('rx-open',!was);c.setAttribute('aria-expanded',String(!was));rxFoot(c,m);
- if(!was){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
+ if(!was&&c.closest('#wall')){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
   if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
-const rxDraw=id=>{const c=$('#wall .msg[data-id="'+String(id).replace(/"/g,'')+'"]'),m=msgById(id);if(c&&m)rxFoot(c,m)};
+const rxDraw=id=>{const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q),m=msgById(id);if(c&&m)rxFoot(c,m)};
 const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
 function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
  if(!RXB[id])RXBASE[id]={c:Object.assign({},RX[id]||{}),m:prev};
@@ -337,7 +337,7 @@ async function syncRx(id){if(RXB[id]){RXD[id]=1;return}RXB[id]=1;
  finally{RXB[id]=0}}
 const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now();
  Object.keys(s).forEach(id=>{if(now-(RXT[id]||0)>2e4)RX[id]=s[id]});Object.keys(RX).forEach(id=>{if(!(id in s)&&now-(RXT[id]||0)>2e4)delete RX[id]})};
-addEventListener('click',e=>{if(!e.target.closest('#wall .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
+addEventListener('click',e=>{if(!e.target.closest('#wall .msg,#pinwrap .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
 /* admin: pin a message (a pinned note stays first and stays on screen while the wall scrolls). Admins can pin / unpin / delete, but never edit what someone wrote. */
 async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,pin:pin});
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':r.error=='nomsg'?'That message no longer exists.':'Not saved. Check the admin key.');return}
@@ -377,9 +377,9 @@ function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,
   wh.append(el('small','mdt',t.getDate()+' '+MON[t.getMonth()]+(t.getFullYear()!==new Date().getFullYear()?' '+t.getFullYear():'')),tm);wh.title=t.toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});hd.append(wh)}
  hd.append(who);
  const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';if(isPin(m))c.append(el('small','pinb','\uD83D\uDCCC PINNED'));c.append(hd,p);return c}
-function fitWall(){const w=$('#wall'),k=w.children;w.style.maxHeight='';if(k.length<=MSG_SHOW||!k[MSG_SHOW].classList.contains('msg'))return;
- const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[MSG_SHOW].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
-function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),st=w.scrollTop;w.replaceChildren();
+function fitWall(){const w=$('#wall'),k=w.children,n=MSG_SHOW-($('#pinwrap').hidden?0:1);w.style.maxHeight='';if(k.length<=n||!k[n].classList.contains('msg'))return;      // a pinned note sits above the box and takes one of the slots
+ const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[n].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
+function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=w.scrollTop;w.replaceChildren();pw.replaceChildren();
  if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
  all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
   if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
@@ -388,8 +388,8 @@ function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),st=w.scrollTop;w.rep
    const p=el('button','mbtn mp'+(isPin(m)?' on':''),'📌');p.type='button';                              // admin only (hidden for visitors): pin / unpin
    p.setAttribute('aria-label',isPin(m)?'Unpin message':'Pin message');p.title=isPin(m)?'Unpin':'Pin to top';
    p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p)}
-  w.append(c)});
- w.classList.toggle('hp',!!all.length&&isPin(all[0]));if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
+  (i===0&&isPin(m)?pw:w).append(c)});      // the pinned note lives ABOVE the scrolling box: the rest scrolls below it with the normal gap and never slides under it
+ pw.hidden=!(all.length&&isPin(all[0]));if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
  $('#mcnt').textContent=all.length+(all.length==1?' message':' messages')+(all.length>MSG_SHOW?' · scroll to read them all':'')}
 $('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
