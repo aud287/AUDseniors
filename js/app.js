@@ -293,8 +293,8 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
    v[i]++;pollSeen[k]=v[i];pollPut(p.q,i,o[0]);lock(i,1);api({action:'vote',poll:pi,option:i})};c.append(b)});
  c.append(m);w.append(c);const j=saved();if(j>=0)lock(j,0)})}
 
-/* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
-let msgSort='new',msgFirst=true;const MSG_SHOW=4;
+/* ---- messages: one scroll box that shows 6 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
+let msgSort='new',msgFirst=true;const MSG_SHOW=6;
 const isPin=m=>String(m.pin)==='1';                    // pinned message: always first, and it stays on screen while the wall scrolls
 const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{if(isPin(a)!==isPin(b))return isPin(a)?-1:1;const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
