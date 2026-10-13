@@ -320,9 +320,12 @@ function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)r
  try{($('#mn').value?$('#mt'):$('#mn')).focus({preventScroll:true})}catch(e){}                       // inside the tap, so phones open the keyboard
  $('#mf').scrollIntoView({behavior:'smooth',block:'center'})}
 function goMsg(id){const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q);
- if(!c)return toast(errText('gone'));closeRx();const w=$('#wall'),box=c.closest('#pinwrap')||w;
- if(w.contains(c))w.scrollTo({top:Math.max(0,c.offsetTop-14),behavior:'smooth'});
- const r=box.getBoundingClientRect();if(r.top<70||r.bottom>innerHeight-30)box.scrollIntoView({behavior:'smooth',block:'center'});      // bring the box itself on screen if it is not
+ if(!c)return toast(errText('gone'));closeRx();const w=$('#wall'),sm=RM?'auto':'smooth';
+ /* put the original in the MIDDLE of the screen: 1) centre it inside the scrolling box, 2) then scroll the page so that spot is the middle of the screen */
+ let top=c.getBoundingClientRect().top;                                                          // where it is on screen right now
+ if(w.contains(c)){const to=Math.max(0,Math.min(w.scrollHeight-w.clientHeight,c.offsetTop-(w.clientHeight-c.offsetHeight)/2));
+  top-=to-w.scrollTop;w.scrollTo({top:to,behavior:sm})}                                          // ... and where it will be once the box has scrolled
+ scrollBy({top:top+c.offsetHeight/2-innerHeight/2,behavior:sm});
  c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1900)}
 function replyLine(m){const b=el('button','rpl'),n=el('bdi');b.type='button';b.setAttribute('aria-label','Go to the message this replies to');
  n.append(el('b','',clean(m.rname,30)||'Anonymous'));b.append(icoReply(),document.createTextNode(' Reply to '),n);
