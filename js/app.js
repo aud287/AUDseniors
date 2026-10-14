@@ -128,7 +128,8 @@ function slot(m,i,L){const s=el('div','slot'),b=el('button',m.ev?'note':'pol');b
  b.setAttribute('aria-label',(m.ev?'Event: ':'Photo: ')+m.title);
  if(m.ev)b.append(ic(m.e||'📌','em'),el('small','',fmt(m.date)),el('b','',m.title));
  else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
- b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete photo');d.onclick=ev=>{ev.stopPropagation();del('photo',m.id)};s.append(d)}return s}
+ b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete photo');d.onclick=ev=>{ev.stopPropagation();del('photo',m.id)};s.append(d);
+  if(m.bn){const k=el('button','banb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('photo',m)};s.append(k)}}return s}
 function strings(){const B=$('#board'),r=B.getBoundingClientRect(),P=$$('#grid .pin').map(p=>{const q=p.getBoundingClientRect();return[q.left+q.width/2-r.left-B.clientLeft,q.top+q.height/2-r.top-B.clientTop]});let h='';
  const ln=(a,b,c)=>{h+='<path pathLength="1" stroke="'+c+'" d="M'+a[0]+' '+a[1]+'Q'+(a[0]+b[0])/2+' '+((a[1]+b[1])/2+Math.hypot(a[0]-b[0],a[1]-b[1])*.12+14)+' '+b[0]+' '+b[1]+'"/>'};
  P.forEach((p,i)=>{if(P[i+1])ln(p,P[i+1],'#b3202e');if(i%2==0&&P[i+2])ln(p,P[i+2],'#2f6b45')});$('#str').innerHTML=h}
@@ -198,12 +199,15 @@ addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')retu
 $('#add').onclick=openAdd;
 $('#af').onsubmit=async e=>{e.preventDefault();const f=$('#pf').files[0];if(!f||!/^image\//.test(f.type))return toast('Choose an image.');
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
- try{const img=await shrink(f),nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=await api({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},{timeout:60000});
+ let rr=null;
+ try{const [img,bc]=await Promise.all([shrink(f),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
+  if(bc&&bc.photo){showBan(bc.photo);return}
+  const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await api({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},{timeout:60000});
   if(!r.ok&&!r.demo){bad=r.error;throw 0}
   const mine={};
   MEM.unshift(r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:mine.uid||'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img});
   setCat('ALL');$('#am').close();e.target.reset();
-  toast(r.demo?'Added (demo: connect the Backend link to keep it).':'✅ تم رفع الصورة بنجاح',10000)}catch(x){toast(bad?errText(bad):'Could not send. Try again.')}
+  toast(r.demo?'Added (demo: connect the Backend link to keep it).':'✅ تم رفع الصورة بنجاح',10000)}catch(x){if(bad=='banned'&&rr)showBan(rr);else toast(bad?errText(bad):'Could not send. Try again.')}
  finally{btn.disabled=false;spin.hidden=true;btxt.textContent='SUBMIT MEMORY'}};
 
 /* ---- frame tool: drag/pinch your photo to fit under the class frame, download as one PNG ---- */
@@ -303,7 +307,12 @@ const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Ju
 /* ---- reactions (Telegram style): tap a note -> a small picker; chips with counts sit under the text on the left; nothing shows until someone reacts ----
    one reaction per device per message (tap another to change it, tap yours again to remove it) · counts live on the backend, "mine" is remembered on this device */
 const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['party','🎉','Celebrate'],['grad','🎓','Graduation']];
-const DEV=(()=>{try{let d=localStorage.getItem('aud_dev');if(!d){d=Array.from(crypto.getRandomValues(new Uint8Array(10)),x=>(x%36).toString(36)).join('');localStorage.setItem('aud_dev',d)}return d}catch(e){return'x'+Math.random().toString(36).slice(2,12)}})();
+const DEV=(()=>{let d='';try{d=localStorage.getItem('aud_dev')||''}catch(e){}
+ if(!d){const m=document.cookie.match(/(?:^|; )aud_dev=([a-z0-9]{6,32})/);if(m)d=m[1]}                                 // this browser's anonymous id is kept in two places: clearing only one of them does not make it a "new device"
+ if(!d){try{d=Array.from(crypto.getRandomValues(new Uint8Array(10)),x=>(x%36).toString(36)).join('')}catch(e){d='x'+Math.random().toString(36).slice(2,12)}}
+ try{localStorage.setItem('aud_dev',d)}catch(e){}
+ try{document.cookie='aud_dev='+d+';max-age=315360000;path=/;SameSite=Lax'+(location.protocol=='https:'?';Secure':'')}catch(e){}
+ return d})();
 let RX={};const RXT={},MINE=(()=>{try{return JSON.parse(localStorage.getItem('aud_mrx')||'{}')||{}}catch(e){return{}}})();      // RX: message id -> {love:n,...} · RXT: when I last changed it (a refresh cannot flicker it back for 20 s)
 const saveMine=()=>{try{localStorage.setItem('aud_mrx',JSON.stringify(MINE))}catch(e){}};
 const msgById=id=>MSG.find(x=>String(x.id)===String(id));
@@ -312,7 +321,7 @@ const msgById=id=>MSG.find(x=>String(x.id)===String(id));
 let REPLIES={};                                          // message id -> how many replies it has (rebuilt on every render)
 const ICO_REPLY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>';
 function icoReply(){const t=document.createElement('template');t.innerHTML=ICO_REPLY;return t.content.firstChild}
-const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,90).join('')+(a.length>90?'…':'')};      // first 30 characters of the original (emoji-safe)
+const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,30).join('')+(a.length>30?'…':'')};      // first 30 characters of the original (emoji-safe)
 function setReply(r){REPLY=r||null;const b=$('#mreply');if(!b)return;b.hidden=!REPLY;if(REPLY){b.querySelector('.rpbar-n').textContent=REPLY.name;b.querySelector('.rpbar-t').textContent=REPLY.text?'· '+REPLY.text:''}}
 $('#mreplyx').onclick=()=>{setReply(null);try{$('#mt').focus({preventScroll:true})}catch(e){}};      // the ✕ on the "Replying to" bar
 function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)return;
@@ -416,7 +425,8 @@ function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=
   if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d);
    const p=el('button','mbtn mp'+(isPin(m)?' on':''),'📌');p.type='button';                              // admin only (hidden for visitors): pin / unpin
    p.setAttribute('aria-label',isPin(m)?'Unpin message':'Pin message');p.title=isPin(m)?'Unpin':'Pin to top';
-   p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p)}
+   p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p);
+   if(m.bn&&!m.badge){const k=el('button','mbtn mb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device (founder)';k.onclick=ev=>{ev.stopPropagation();openBan('message',m)};c.append(k)}}
   (i===0&&isPin(m)?pw:w).append(c)});      // the pinned note lives ABOVE the scrolling box: the rest scrolls below it with the normal gap and never slides under it
  pw.hidden=!(all.length&&isPin(all[0]));if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
  $('#mcnt').textContent=all.length+(all.length==1?' message':' messages')+(all.length>MSG_SHOW?' · scroll to read them all':'')}
@@ -428,7 +438,7 @@ $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errTe
  if(rp){tmp.reply=rp.id;tmp.rname=rp.name;tmp.rtext=rp.text}
  if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
  const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await api(pl);if(btn)btn.disabled=false;
- if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return toast(errText(r.error))}
+ if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return r.error=='banned'?showBan(r):toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
 /* ---- events ---- */
@@ -558,9 +568,9 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
-async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
+async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({dev:DEV,...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
   const ac=new AbortController(),to=setTimeout(()=>ac.abort(),ms);let t;
   try{t=await(await fetch(BACKEND.apiUrl,{method:'POST',body:body,headers:{'Content-Type':'text/plain;charset=utf-8'},signal:ac.signal})).text()}catch(e){last={ok:0,error:'net'};continue}finally{clearTimeout(to)}
@@ -580,7 +590,7 @@ async function remote(v){const z={messages:[],photos:[],votes:{}};if(!BACKEND.en
 /* last good copy of the home data: the next visit paints from it instantly, then updates in the background */
 const HKEY='aud_home_v2',readHome=()=>{try{const o=JSON.parse(localStorage.getItem(HKEY)||'null');return o&&o.j&&o.j.ok?o.j:null}catch(e){return null}},saveHome=j=>{try{localStorage.setItem(HKEY,JSON.stringify({t:Date.now(),j:j}))}catch(e){}};
 function boardSkeleton(){const g=$('#grid');g.replaceChildren();for(let i=0;i<8;i++){const s=el('div','slot sk'),p=el('div','pol');p.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');p.append(el('div','sk-ph'),el('div','sk-cap'));s.append(el('i','pin'),p);g.append(s)}$('#cnt').textContent='Loading memories…';$('#more').hidden=true;requestAnimationFrame(strings)}
-const vp=p=>({id:p.id,pid:p.id,uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600)});
+const vp=p=>({id:p.id,pid:p.id,bn:p.bn?1:0,uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600)});
 function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...MEMORIES.filter(m=>!m.ev));
  ph.sort((a,b)=>String(a.date)<String(b.date)?1:-1);
  const ev=EVENTS.slice().sort((a,b)=>a.d<b.d?-1:1).map(x=>({ev:1,cat:'EVENTS',title:x.t,date:x.d,e:x.e,cap:x.x})),o=[];
@@ -588,6 +598,55 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
 let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
+/* ---- blocking a device from posting. The browser keeps an anonymous id (DEV); the backend remembers which id wrote each message / photo, so the founder can block it from messages, photos or both, for any span.
+   Blocked people can still browse everything; when they try to post they see how long the block is and how much is left. The founder lifts a block early from "BLOCKED DEVICES". ---- */
+const addCal=(t0,Y,M)=>{const d=new Date(t0),day=d.getUTCDate();d.setUTCDate(1);d.setUTCFullYear(d.getUTCFullYear()+Y);d.setUTCMonth(d.getUTCMonth()+M);d.setUTCDate(Math.min(day,new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate()));return d.getTime()};      // same calendar maths as the backend
+function spanOf(a,b){if(b<=a)return{y:0,mo:0,d:0,h:0,m:0,s:0};let y=0,mo=0;while(addCal(a,y+1,0)<=b)y++;while(addCal(a,y,mo+1)<=b)mo++;
+ let r=b-addCal(a,y,mo);const d=Math.floor(r/864e5);r-=d*864e5;const h=Math.floor(r/36e5);r-=h*36e5;const m=Math.floor(r/6e4);r-=m*6e4;return{y,mo,d,h,m,s:Math.floor(r/1e3)}}
+const UNITS={en:{y:['year','years'],mo:['month','months'],d:['day','days'],h:['hour','hours'],m:['minute','minutes'],s:['second','seconds']},
+ ar:{y:['سنة','سنتين','سنوات'],mo:['شهر','شهرين','شهور'],d:['يوم','يومين','أيام'],h:['ساعة','ساعتين','ساعات'],m:['دقيقة','دقيقتين','دقائق'],s:['ثانية','ثانيتين','ثوانٍ']}};
+function fmtSpan(sp,lang,secs){const p=[];['y','mo','d','h','m','s'].forEach(k=>{if(k=='s'&&!secs)return;const v=sp[k];if(!v)return;const u=UNITS[lang][k];
+  p.push(lang=='ar'?(v==1?u[0]:v==2?u[1]:v<=10?v+' '+u[2]:v+' '+u[0]):v+' '+(v==1?u[0]:u[1]))});
+ return p.length?p.join(lang=='ar'?' و ':' '):(lang=='ar'?'أقل من دقيقة':secs?'0 seconds':'less than a minute')}
+const when=t=>new Date(t).toLocaleString([],{dateStyle:'medium',timeStyle:'short'});
+/* what a blocked visitor sees (English + Arabic, the time left counts down live) */
+let bnT=0;const BN_WHAT={msg:['post messages','إرسال رسائل'],photo:['upload photos','رفع صور'],both:['post messages or upload photos','إرسال رسائل أو رفع صور']};
+function showBan(i){const dlg=$('#bn'),skew=(i.now||Date.now())-Date.now(),w=BN_WHAT[i.scope]||BN_WHAT.msg,total=spanOf(i.from||i.until-864e5,i.until),live=[];
+ const fill=(box,lang,a,l2,l3,z)=>{box.replaceChildren();const p1=el('p','',a),p2=el('p'),p3=el('p'),p4=el('p','',z),b2=el('b','',fmtSpan(total,lang,false)),b3=el('b');
+  p2.append(document.createTextNode(l2),b2);p3.append(document.createTextNode(l3),b3);box.append(p1,p2,p3,p4);live.push([b3,lang])};
+ fill($('#bnen'),'en',"You can't "+w[0]+' right now.','Blocked for: ','Time left: ','You can still browse the whole site as usual.');
+ fill($('#bnar'),'ar','لا يمكنك '+w[1]+' حاليًا.','مدة الحظر: ','الوقت المتبقي: ','يمكنك تصفح الموقع بشكل طبيعي.');
+ const tick=()=>{const now=Date.now()+skew,rem=i.until-now;live.forEach(([n,lang])=>{n.textContent=rem>0?fmtSpan(spanOf(now,i.until),lang,rem<36e5):(lang=='ar'?'انتهى الحظر، جرّب مرة أخرى':'Finished. Try again now.')})};
+ clearInterval(bnT);tick();bnT=setInterval(tick,1000);if(!dlg.open)dlg.showModal()}
+$('#bn').addEventListener('close',()=>clearInterval(bnT));
+/* founder: the "Block this device" window */
+const BAN_ERR={nodev:"This one was posted before devices were tracked (or by staff), so it can't be blocked.",gone:'That message / photo was already deleted, so its device is unknown.',span:'Enter a duration of at least 1 hour (whole numbers).',what:'Choose what to block.',founder:'Only the founder link can block devices.',key:'The founder key was not accepted. Reopen the founder link.'};
+let BD=null;
+function bdRead(){const n=id=>{const v=$(id).value.trim();return v===''?0:Number(v)},Y=n('#bdy'),Mo=n('#bdmo'),D=n('#bdd'),H=n('#bdh'),ok=[Y,Mo,D,H].every(x=>Number.isInteger(x)&&x>=0&&x<=9999);return{Y,Mo,D,H,ok,zero:ok&&!(Y+Mo+D+H)}}
+function bdPreview(){const s=bdRead(),u=$('#bduntil'),go=$('#bdgo');
+ if(!s.ok){u.textContent='Use whole numbers (0 or more).';go.disabled=true;return}
+ if(s.zero){u.textContent='Enter how long (at least 1 hour).';go.disabled=true;return}
+ go.disabled=false;u.textContent='Blocked until: '+when(Math.min(addCal(Date.now(),s.Y,s.Mo)+s.D*864e5+s.H*36e5,Date.UTC(9999,11,31)))}
+function openBan(type,m){BD={type,id:m.id};$('#bdwho').textContent='From: '+(type=='photo'?(m.name||'Anonymous')+' · photo':(clean(m.name,30)||'Anonymous')+' · '+exc30(m.message));
+ $$('input[name=bdw]').forEach(r=>r.checked=r.value==(type=='photo'?'photo':'msg'));['#bdy','#bdmo','#bdh'].forEach(i=>$(i).value=0);$('#bdd').value=1;bdPreview();$('#bd').showModal()}
+$$('#bd input[type=number]').forEach(i=>i.addEventListener('input',bdPreview));$('#bdno').onclick=()=>$('#bd').close();
+$('#bdf').onsubmit=async e=>{e.preventDefault();if(!BD)return;const s=bdRead();if(!s.ok||s.zero)return bdPreview();
+ const w=(document.querySelector('input[name=bdw]:checked')||{}).value||'msg',btn=$('#bdgo');btn.disabled=true;
+ const r=await api({action:'ban',key:ADK,type:BD.type,id:BD.id,msg:w!='photo',photo:w!='msg',y:s.Y,mo:s.Mo,d:s.D,h:s.H});btn.disabled=false;
+ if(!r.ok&&!r.demo){toast(BAN_ERR[r.error]||errText(r.error));return}
+ $('#bd').close();toast(r.demo?'Blocked (demo: connect the Backend link).':'Device blocked until '+when(r.until)+'.',6000)};
+/* founder: who is blocked right now, and lift a block early */
+let blT=0;
+async function openBans(){const dlg=$('#bl'),ul=$('#bllist'),sub=$('#blsub');ul.replaceChildren();sub.textContent='Loading…';if(!dlg.open)dlg.showModal();
+ const r=await api({action:'listbans',key:ADK});if(!r.ok&&!r.demo){sub.textContent=BAN_ERR[r.error]||errText(r.error);return}
+ const skew=(r.now||Date.now())-Date.now(),count=()=>{const n=ul.children.length;sub.textContent=n?n+(n==1?' device is':' devices are')+' blocked right now.':'No active blocks.'};
+ (r.bans||[]).forEach(b=>{const li=el('li','bl-r'),w=el('div','bl-w'),t=el('span','bl-t'),k=el('button','btn g bl-lift','LIFT');k.type='button';
+  w.append(el('b','',b.label||'Unknown'),el('small','',b.msg&&b.photo?'Messages + photos':b.msg?'Messages':'Photos'));
+  li._tick=()=>{t.textContent=fmtSpan(spanOf(Date.now()+skew,b.until),'en',false)+' left'};li._tick();
+  k.onclick=async()=>{k.disabled=true;const x=await api({action:'unban',key:ADK,dev:b.dev});if(!x.ok&&!x.demo){k.disabled=false;return toast(BAN_ERR[x.error]||errText(x.error))}li.remove();count();toast('Block lifted.')};
+  li.append(w,t,k);ul.append(li)});count();
+ clearInterval(blT);blT=setInterval(()=>ul.querySelectorAll('li').forEach(li=>li._tick&&li._tick()),1000)}
+$('#bl').addEventListener('close',()=>clearInterval(blT));$('#blx').onclick=()=>$('#bl').close();$('#banman').onclick=openBans;
 async function del(type,id){const what=type=='photo'?'photo':type=='note'?'post':'message';
  if(!await ask('Delete this '+what+'?','It disappears for everyone'+(type=='message'?'.':', along with its comments and loves.')))return;
  const r=await api({action:'delete',type,id,key:ADK});if(!r.ok){toast('Not deleted. Check the admin key.');return}

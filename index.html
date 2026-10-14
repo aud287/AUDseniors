@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 <link rel="preconnect" href="https://lh3.googleusercontent.com">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 <!-- Fonts + Font Awesome load without blocking first paint; text still renders (system font) then swaps in -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=DM+Sans:wght@400;600;700&family=Playfair+Display:wght@700;900&family=Playpen+Sans+Arabic:wght@100..800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
@@ -88,7 +88,7 @@
 <div class="pinwrap" id="pinwrap" hidden></div>
 <div class="wall" id="wall" role="region" aria-label="Messages from the class"></div>
 <div class="row"><span id="mcnt" class="cnt"></span></div>
-<div class="mlockbar" id="mlockbar" hidden><span id="mlockst"></span><button type="button" class="btn g" id="mlock"></button></div>
+<div class="mlockbar" id="mlockbar" hidden><span id="mlockst"></span><span class="mlk-b"><button type="button" class="btn g" id="mlock"></button><button type="button" class="btn g" id="banman">🚫 BLOCKED DEVICES</button></span></div>
 <form id="mf" class="glass"><p class="mlocknote" id="mlocknote" role="status" hidden></p><div class="rpbar" id="mreply" hidden><span class="rpbar-l">Replying to</span><b class="rpbar-n" dir="auto"></b><span class="rpbar-t" dir="auto"></span><button type="button" class="rpbar-x" id="mreplyx" aria-label="Cancel reply">✕</button></div><input id="mn" maxlength="30" placeholder="Name / Nickname" aria-label="Name" required="required"/><textarea id="mt" maxlength="240" rows="3" placeholder="Write something for the class…" aria-label="Message" required="required"></textarea><button class="btn">POST MESSAGE</button></form></section>
 
 <section id="events" class="rv"><h2>WHAT'S HAPPENING?</h2><p class="sub">Save the dates.</p><div class="evs" id="ev"></div></section>
@@ -113,7 +113,34 @@
 <h3 id="askt">Delete this?</h3><p class="sh-sub" id="askp"></p>
 <div class="sh-a"><button class="btn dng" value="ok">DELETE</button><button class="btn g" value="no">KEEP IT</button></div>
 </form></dialog>
-<script src="js/config.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<dialog id="bn" class="sheet ask" aria-labelledby="bnt"><form method="dialog" class="sh">
+<h3 id="bnt">You're blocked for now</h3>
+<div class="bn-s" id="bnen"></div><div class="bn-s" id="bnar" lang="ar" dir="rtl"></div>
+<div class="sh-a"><button class="btn" value="ok">OK</button></div>
+</form></dialog>
+
+<dialog id="bd" class="sheet" aria-labelledby="bdt"><form id="bdf" class="sh">
+<h3 id="bdt">Block this device</h3><p class="sh-sub" id="bdwho"></p>
+<fieldset class="bd-set"><legend>Block it from</legend>
+<label><input type="radio" name="bdw" value="msg"/> Writing messages</label>
+<label><input type="radio" name="bdw" value="photo"/> Uploading photos</label>
+<label><input type="radio" name="bdw" value="both"/> Both</label></fieldset>
+<fieldset class="bd-set"><legend>For how long</legend><div class="bd-grid">
+<label>Years<input type="number" id="bdy" min="0" max="9999" step="1" value="0" inputmode="numeric"/></label>
+<label>Months<input type="number" id="bdmo" min="0" max="9999" step="1" value="0" inputmode="numeric"/></label>
+<label>Days<input type="number" id="bdd" min="0" max="9999" step="1" value="1" inputmode="numeric"/></label>
+<label>Hours<input type="number" id="bdh" min="0" max="9999" step="1" value="0" inputmode="numeric"/></label></div></fieldset>
+<p class="bd-until" id="bduntil"></p>
+<p class="sh-sub bd-tip">The person can still browse the whole site. Tip: block first, then delete the message or photo (deleting it first forgets whose device it was).</p>
+<div class="sh-a"><button class="btn dng" id="bdgo" type="submit">BLOCK</button><button class="btn g" type="button" id="bdno">CANCEL</button></div>
+</form></dialog>
+
+<dialog id="bl" class="sheet" aria-labelledby="blt"><div class="sh">
+<h3 id="blt">Blocked devices</h3><p class="sh-sub" id="blsub"></p>
+<ul class="bl-list" id="bllist"></ul>
+<div class="sh-a"><button class="btn g" type="button" id="blx">CLOSE</button></div>
+</div></dialog>
+<script src="js/config.js?v=9"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>

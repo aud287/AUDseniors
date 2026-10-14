@@ -26,14 +26,15 @@ const CHUNK = 30000;                      // cache chunk size (a cache value is 
 const THEMES = ['wine', 'gold', 'sky', 'mint'];   // looks of an admin text post
 const RESERVED = ['admin', 'administrator', 'official', 'moderator', 'support', 'ادمن', 'الادمن', 'مشرف', 'الادارة', 'ادارة']; // add your class page name here
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext'],   // pin: '1' = pinned to the top of the wall (only one at a time) · badge: 'founder' | 'team' (posted from the founder / admin link) | '' (visitor) · reply = id of the message this one answers, rname / rtext = that message's name + first 30 characters (copied at reply time, so the preview survives even if the original is deleted)
-  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid'],
+  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top of the wall (only one at a time) · badge: 'founder' | 'team' (posted from the founder / admin link) | '' (visitor) · reply = id of the message this one answers, rname / rtext = that message's name + first 30 characters (copied at reply time, so the preview survives even if the original is deleted)
+  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev'],           // dev = anonymous id of the device that posted it (never sent to visitors; only lets the founder block that device)
   Votes: ['poll', 'option', 'date'],
   Users: ['uid', 'name', 'nameKey', 'sk', 'avatar', 'badges', 'ne', 'avatarAt', 'date'],
   Reactions: ['post', 'uid', 'date'],
   Comments: ['id', 'post', 'parent', 'uid', 'text', 'date', 'media'],   // media: s:STICKER_NAME  or  i:DRIVE_FILE_ID
   Notes: ['id', 'kind', 'title', 'body', 'extra', 'category', 'date'],   // admin posts: text / event (occasion) / poll
   PollVotes: ['post', 'uid', 'option', 'date'],
+  Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label'],   // devices the founder blocked: msg / photo = '1' when blocked from posting messages / photos · from, until = milliseconds since 1970 · label = who it was (for the founder's list)
   Settings: ['key', 'value'],                               // site switches that must survive a restart (msgLock = '1' while visitor messages are paused)
   MsgReactions: ['msg', 'dev', 'emoji', 'date']             // reactions on wall messages: a LOG (rows are only ever added). The last row of a (message, device) pair is that device's current reaction; emoji '' = removed
 };
@@ -118,6 +119,23 @@ function adminState(k) {                                 // 'ok' (admin OR found
   return ADMIN_KEY === DEF_ADMIN && FOUNDER_KEY === DEF_FOUNDER ? 'unset' : 'key';
 }
 function lockOn() { const f = find('Settings', 'key', 'msgLock'); return !!f && String(f.o.value) === '1'; }          // are visitor messages paused?
+const DEV_RE = /^[a-z0-9]{6,32}$/i;
+function devId(v) { v = String(v || ''); return DEV_RE.test(v) ? v : ''; }                                // the id a browser keeps for itself (anonymous, random)
+function noDev(o) { const x = Object.assign({}, o); x.bn = devId(o.dev) ? 1 : 0; delete x.dev; return x; }   // what visitors get to see: never the device id, only "can the founder block this one?"
+function banOf(dev, what) {                              // the active block that stops this device from posting `what` ('msg' | 'photo'), or null
+  const f = dev ? find('Bans', 'dev', dev) : null; if (!f) return null;
+  const o = f.o, until = Number(o.until);
+  if (!(until > Date.now()) || String(o[what]) !== '1') return null;
+  return { from: Number(o.from) || 0, until: until, msg: String(o.msg) === '1', photo: String(o.photo) === '1' };
+}
+function banInfo(b, what) { return { what: what, scope: b.msg && b.photo ? 'both' : b.msg ? 'msg' : 'photo', from: b.from, until: b.until, now: Date.now() }; }
+function banErr(b, what) { return out(Object.assign({ ok: 0, error: 'banned' }, banInfo(b, what))); }
+function addSpan(t0, Y, Mo, D, H) {                      // calendar years + months (the day is kept inside the month: Jan 31 + 1 month = Feb 28), then days + hours
+  const d = new Date(t0), day = d.getUTCDate();
+  d.setUTCDate(1); d.setUTCFullYear(d.getUTCFullYear() + Y); d.setUTCMonth(d.getUTCMonth() + Mo);
+  d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
+  return d.getTime() + D * 864e5 + H * 36e5;
+}
 function setLock(on) { const f = find('Settings', 'key', 'msgLock'), v = on ? '1' : '0'; if (f) setRow('Settings', f.row, { value: v }); else put('Settings', { key: 'msgLock', value: v }); }
 function adminOk(k) { return adminState(k) === 'ok'; }
 function authUser(d) { if (!d.uid || !d.sk) return null; const f = find('Users', 'uid', d.uid); return f && String(f.o.sk) === sha(d.sk) ? f : null; }
@@ -205,8 +223,8 @@ function buildSnap() {
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
   return {
     at: Date.now(), locked: lockOn() ? 1 : 0,
-    photos: P.slice().reverse().slice(0, 300).map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || '') })),
-    messages: rows('Messages').reverse().slice(0, 200), mr: mr, votes: votes, likes: likes, cc: cc, notes: notes, pc: pc, users: users, top: top, mineIdx: mineIdx, pvIdx: pvIdx, po: po,
+    photos: P.slice().reverse().slice(0, 300).map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0 })),
+    messages: rows('Messages').reverse().slice(0, 200).map(noDev), mr: mr, votes: votes, likes: likes, cc: cc, notes: notes, pc: pc, users: users, top: top, mineIdx: mineIdx, pvIdx: pvIdx, po: po,
     rx: R.slice(-RX_KEEP).map(r => [String(r.post), String(r.uid), String(r.date)]),
     comments: C.slice(-FEED_COMMENTS).map(c => ({ id: String(c.id), post: String(c.post), parent: String(c.parent || ''), uid: String(c.uid), text: String(c.text), date: String(c.date), media: String(c.media || '') }))
   };
@@ -254,7 +272,7 @@ function doPost(e) {
     hit = again(); if (hit) return hit;                                        // an earlier try of this same request finished while we waited
     PATCHED = false;
     const res = A(d, new Date().toISOString(), rid || Utilities.getUuid().slice(0, 8)), body = res.getContent(), ok = body.indexOf('"ok":1') > -1;
-    if (ok && !PATCHED && d.action !== 'auth' && d.action !== 'me') bump();     // writes that did not patch the snapshot throw it away
+    if (ok && !PATCHED && ['auth', 'me', 'bancheck', 'listbans', 'ban', 'unban'].indexOf(d.action) < 0) bump();     // writes that did not patch the snapshot throw it away
     if (ok && rid) c.put('rid_' + rid, body, RID_TTL);
     return res;
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
@@ -266,7 +284,13 @@ const ACT = {
     if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
     const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '' };
     if (!it.name || !it.message) return out({ ok: 0, error: 'empty' });
-    if (!r && lockOn()) return out({ ok: 0, error: 'locked' });                       // visitors only: closed while the founder has paused messages
+    let dev = '';
+    if (!r) {                                                                         // visitors only (staff are never blocked):
+      dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });          //   an old cached page that does not send its device id must reload
+      const bn = banOf(dev, 'msg'); if (bn) return banErr(bn, 'msg');                 //   blocked by the founder
+      if (lockOn()) return out({ ok: 0, error: 'locked' });                           //   closed while the founder has paused messages
+    }
+    it.dev = dev;
     if (d.reply) {                                                                    // a reply is a normal new message + a link to the original; the preview comes from the REAL original, never from what the browser sends
       const f = find('Messages', 'id', String(d.reply).slice(0, 60));
       if (!f) return out({ ok: 0, error: 'gone' });                                   // the original was deleted meanwhile
@@ -275,24 +299,26 @@ const ACT = {
     }
     if (!r && limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     put('Messages', it);
-    patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(it); x.messages = x.messages.slice(0, 200); });
-    return out({ ok: 1, item: it });
+    patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(noDev(it)); x.messages = x.messages.slice(0, 200); });
+    return out({ ok: 1, item: noDev(it) });
   },
   photo(d, now, id) {                                      // visitor photo, or an official-page photo (admin key)
     const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
-    let uid = '', name = clean(d.name, 30) || 'Anonymous';
+    let uid = '', dev = '', name = clean(d.name, 30) || 'Anonymous';
     if (d.as === 'official') { const a = actor(d); if (a.err) return out({ ok: 0, error: a.err }); uid = 'official'; }
     else {
+      dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
+      const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');             // blocked by the founder: refused before anything is stored
       if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
       if (d.uid) { const f = authUser(d); if (f) { uid = String(f.o.uid); name = String(f.o.name); } }
     }
     const bytes = Utilities.base64Decode(img.split(',')[1]);
     const f = folder().createFile(Utilities.newBlob(bytes, 'image/jpeg', id + '.jpg'));
     f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: uid };
+    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: uid, dev: dev };
     put('Photos', it);
-    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: it.uid }); x.photos = x.photos.slice(0, 300); x.po[it.id] = it.uid; });
-    return out({ ok: 1, item: it });
+    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: it.uid, bn: dev ? 1 : 0 }); x.photos = x.photos.slice(0, 300); x.po[it.id] = it.uid; });
+    return out({ ok: 1, item: noDev(it) });
   },
   vote(d, now) {
     const poll = Number(d.poll) || 0, option = Number(d.option) || 0; put('Votes', { poll: poll, option: option, date: now });
@@ -300,6 +326,40 @@ const ACT = {
     return out({ ok: 1 });
   },
   auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0 } : { ok: 0, error: s }); },
+  bancheck(d) {                                            // anyone: "is THIS device blocked right now?" (the page asks before it uploads a heavy photo)
+    const dv = devId(d.dev), m = banOf(dv, 'msg'), p = banOf(dv, 'photo');
+    return out({ ok: 1, now: Date.now(), msg: m ? banInfo(m, 'msg') : null, photo: p ? banInfo(p, 'photo') : null });
+  },
+  ban(d) {                                                 // FOUNDER only: block the device behind one message / photo from posting messages, photos or both, for any span
+    if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
+    const yes = v => v === true || v === 1 || v === '1', msg = yes(d.msg), photo = yes(d.photo);
+    if (!msg && !photo) return out({ ok: 0, error: 'what' });
+    const n = k => { const x = Number(d[k] || 0); return Math.floor(x) === x && x >= 0 && x <= 9999 ? x : NaN; };
+    const Y = n('y'), Mo = n('mo'), D = n('d'), H = n('h');
+    if ([Y, Mo, D, H].some(isNaN) || Y + Mo + D + H === 0) return out({ ok: 0, error: 'span' });
+    let f, label = '';
+    if (d.type === 'photo') { f = find('Photos', 'id', String(d.id)); if (f) label = clean(f.o.name, 30) + ' · photo'; }
+    else { f = find('Messages', 'id', String(d.id)); if (f) { const a = Array.from(String(f.o.message || '').replace(/\s+/g, ' ').trim()); label = clean(f.o.name, 30) + ' · ' + a.slice(0, 30).join('') + (a.length > 30 ? '…' : ''); } }
+    if (!f) return out({ ok: 0, error: 'gone' });
+    const dev = devId(f.o.dev); if (!dev) return out({ ok: 0, error: 'nodev' });      // posted before devices were recorded (or by staff)
+    const now = Date.now(), until = Math.min(addSpan(now, Y, Mo, D, H), Date.UTC(9999, 11, 31));
+    const row = { dev: dev, msg: msg ? '1' : '', photo: photo ? '1' : '', from: now, until: until, label: label }, b = find('Bans', 'dev', dev);
+    if (b) setRow('Bans', b.row, row); else put('Bans', row);                          // blocking the same device again replaces its earlier block
+    return out({ ok: 1, from: now, until: until, now: now, label: label });
+  },
+  unban(d) {                                               // FOUNDER only: lift a block before it ends
+    if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
+    const b = find('Bans', 'dev', devId(d.dev));
+    if (b) setRow('Bans', b.row, { msg: '', photo: '', until: '0' });
+    return out({ ok: 1 });
+  },
+  listbans(d) {                                            // FOUNDER only: the blocks that are still running
+    if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
+    const now = Date.now(), list = rows('Bans').filter(r => Number(r.until) > now && (String(r.msg) === '1' || String(r.photo) === '1'))
+      .map(r => ({ dev: String(r.dev), msg: String(r.msg) === '1', photo: String(r.photo) === '1', from: Number(r.from) || 0, until: Number(r.until), label: String(r.label || '') }))
+      .sort((a, b) => a.until - b.until);
+    return out({ ok: 1, now: now, bans: list });
+  },
   msglock(d) {                                             // FOUNDER only: pause / resume messages from visitors (the admin and the founder can still post)
     if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
     const on = d.on === true || d.on === 1 || d.on === '1';
