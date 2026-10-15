@@ -31,8 +31,8 @@ const HEAD = {
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr4 = '1' once old reaction data was converted
-  MsgReactions: ['msg', 'dev', 'emoji', 'date'],            // STATE: one row per (message, device) = that device's current reaction (emoji '' = removed). Rows are reused, never duplicated
-  MsgCounts: ['msg', 'love', 'haha', 'sad', 'party', 'grad'], // reaction totals per message (derived from MsgReactions on every fold)
+  MsgState: ['msg', 'dev', 'emoji', 'date'],                // STATE: one row per (message, device) = that device's current reaction (emoji '' = removed). Rows are reused, never duplicated. (The tab 'MsgReactions' of earlier versions is only READ, once, to import old reactions: it is never written, so a Google Sheets Table / dropdown rules on it can not break anything)
+  MsgCounts: ['msg', 'love', 'haha', 'sad', 'party', 'grad'], // reaction totals per message (derived from MsgState on every fold)
   MsgInbox: ['line']                                        // taps waiting to be folded:  emoji|messageId|deviceId|time   (emoji = none when a reaction is removed). Emptied by every fold
 };
 /* The old posts page (Users, Reactions, Comments, Notes, PollVotes tabs) was removed from the site. Those tabs are left exactly as they are in your sheet;
@@ -166,25 +166,25 @@ function bump() { const c = cache(); c.remove('b_pub'); c.remove('b_mr'); }     
 function noteErr(where, err) {                         // remember the last server-side problem (Script properties) so diagnose() can show it
   try { console.error(where, err); PropertiesService.getScriptProperties().setProperty('lastErr', new Date().toISOString() + ' ' + where + ': ' + String((err && err.stack) || err).slice(0, 500)); } catch (e) {}
 }
-function migrateOnce() {                                // old format: MsgReactions was an append-only LOG (several rows per device). New format: one row per device and message
-  const c = cache(); if (c.get('mr4ok')) return;
-  const f = find('Settings', 'key', 'mr4'); if (f && String(f.o.value) === '1') { c.put('mr4ok', '1', 21600); return; }
-  const ss = book(), t = tab('MsgReactions'), lr = t.getLastRow();
-  let bk = ss.getSheetByName('MsgReactionsOld');                                    // a copy of the raw log is kept FIRST: nothing is ever cleared before it exists
-  const live = lr > 1 ? t.getRange(2, 1, lr - 1, 4).getValues() : [];
-  if (!bk && live.length) {
-    bk = ss.insertSheet('MsgReactionsOld'); bk.getRange(1, 1, 1, 4).setValues([HEAD.MsgReactions]);
-    if (live.length + 1 > bk.getMaxRows()) bk.insertRowsAfter(bk.getMaxRows(), live.length + 1 - bk.getMaxRows());
-    bk.getRange(2, 1, live.length, 4).setNumberFormat('@').setValues(live.map(r => r.map(x => String(x == null ? '' : x))));
-  }
-  const old = bk && bk.getLastRow() > 1 ? bk.getRange(2, 1, bk.getLastRow() - 1, 4).getValues() : [];   // the original log (if an earlier attempt died half way, it is converted again from here)
-  const last = {}, order = [];
-  old.concat(live).forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });   // the last row of a pair is that device's current reaction
-  const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0);
-  if (lr > 1) t.getRange(2, 1, lr - 1, 4).clearContent();
-  if (keep.length) { const to = 1 + keep.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); t.getRange(2, 1, keep.length, 4).setNumberFormat('@').setValues(keep); }
-  recount();
-  put('Settings', { key: 'mr4', value: '1' }); c.put('mr4ok', '1', 21600);
+function legacyRows() {                                 // every row of the OLD reaction tabs (oldest first). Read only: these tabs are never written by this version
+  const ss = book(); let out = [];
+  ['MsgReactionsOld', 'MsgReactions'].forEach(n => { const t = ss.getSheetByName(n); if (!t) return; const lr = t.getLastRow(); if (lr > 1) out = out.concat(t.getRange(2, 1, lr - 1, Math.max(4, 1)).getValues().map(r => r.slice(0, 4))); });
+  return out;
+}
+function importLegacy() {                               // old reactions -> MsgState. A (message, device) pair that already has a state row is never touched (the state is newer). Returns how many were imported
+  const old = legacyRows(); if (!old.length) return 0;
+  const last = {}, order = []; old.forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });   // the last row of a pair is that device's current reaction
+  const st = tab('MsgState'), slr = st.getLastRow(), have = {}, ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
+  if (slr > 1) st.getRange(2, 1, slr - 1, 2).getValues().forEach(r => have[String(r[0]) + '|' + String(r[1])] = 1);
+  const add = order.filter(k => !have[k]).map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
+  if (add.length) { const to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); st.getRange(slr + 1, 1, add.length, 4).setNumberFormat('@').setValues(add); }
+  return add.length;
+}
+function migrateOnce() {                                // once: bring the reactions of earlier versions into MsgState (nothing old is changed or deleted)
+  const c = cache(); if (c.get('mr5ok')) return;
+  const f = find('Settings', 'key', 'mr5'); if (f && String(f.o.value) === '1') { c.put('mr5ok', '1', 21600); return; }
+  importLegacy(); recount();
+  put('Settings', { key: 'mr5', value: '1' }); c.put('mr5ok', '1', 21600);
 }
 function msgOrder() {                                   // ids of every message in sheet order + the pinned one ('' if none)
   const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return { ids: [], pin: '' };
@@ -206,7 +206,7 @@ function writeCounts(cnt) {                             // MsgCounts = the total
   if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); t.getRange(2, 1, list.length, 6).setNumberFormat('@').setValues(list); }
 }
 function recount() {                                    // rebuild MsgCounts from the state rows (safe to run any time from the editor: it repairs any drift)
-  const t = tab('MsgReactions'), lr = t.getLastRow(), valid = {};
+  const t = tab('MsgState'), lr = t.getLastRow(), valid = {};
   msgOrder().ids.forEach(i => valid[i] = 1);
   const st = lr > 1 ? t.getRange(2, 1, lr - 1, 3).getValues().map(r => [String(r[0]), String(r[1]), String(r[2] || '')]) : [];
   writeCounts(tallies(st, valid)); bump();
@@ -227,7 +227,7 @@ function fold() {                                       // CALLER HOLDS THE LOCK
   const t0 = Date.now();
   const lines = inb.getRange(2, 1, ilr - 1, 1).getValues().map(r => String(r[0]));
   const mo = msgOrder(), valid = {}; mo.ids.forEach(i => valid[i] = 1);
-  const st = tab('MsgReactions'), slr = st.getLastRow();
+  const st = tab('MsgState'), slr = st.getLastRow();
   const sv = slr > 1 ? st.getRange(2, 1, slr - 1, 3).getValues().map(r => [String(r[0]), String(r[1]), String(r[2] || '')]) : [];
   const idx = new Map(); sv.forEach((r, i) => idx.set(r[0] + '|' + r[1], i));
   const add = []; let lo = -1, hi = -1;
@@ -245,6 +245,7 @@ function fold() {                                       // CALLER HOLDS THE LOCK
   const cnt = tallies(sv.concat(add), valid);
   if (hi >= 0 || add.length) writeCounts(cnt);
   inb.getRange(2, 1, ilr - 1, 1).clearContent();        // only now: if anything above failed the taps stay in the inbox and the next fold applies them again (applying twice changes nothing)
+  SpreadsheetApp.flush();
   mrPut(cnt, windowIds(mo));
   const c = cache(), dur = Date.now() - t0; c.put('fold_at', String(Date.now() + Math.max(FOLD_GAP, 2 * dur)), 60);     // next fold allowed from here
   return { cnt: cnt, valid: valid };
@@ -453,7 +454,7 @@ const ACT = {
     const gone = dropRows(photo ? 'Photos' : 'Messages', x => String(x.id) === id);
     if (photo) gone.forEach(x => trashFile(x.fileId));
     else if (gone.length) {
-      dropRows('MsgReactions', x => String(x.msg) === id);   // its reactions go with it ...
+      dropRows('MsgState', x => String(x.msg) === id);   // its reactions go with it ...
       recount();                                             // ... and the totals are rebuilt (taps still waiting for it in the inbox are dropped by the next fold)
     }
     return out({ ok: 1 });
@@ -465,20 +466,22 @@ function diagnose() {                                   // read-only: shows what
   const L = []; const say = s => { L.push(s); Logger.log(s); };
   const ids = msgOrder().ids, idSet = {}; ids.forEach(i => idSet[i] = 1);
   say('Messages: ' + ids.length + ' rows');
-  const sh = n => { const t = book().getSheetByName(n); return t ? t : null; };
-  const mrT = sh('MsgReactions'), cT = sh('MsgCounts'), iT = sh('MsgInbox'), oT = sh('MsgReactionsOld'), sT = sh('Settings');
-  say('Tabs: MsgReactions=' + (mrT ? mrT.getLastRow() - 1 : 'MISSING') + ' rows, MsgCounts=' + (cT ? cT.getLastRow() - 1 : 'MISSING') + ' rows, MsgInbox=' + (iT ? iT.getLastRow() - 1 : 'MISSING') + ' waiting, MsgReactionsOld(backup of the old log)=' + (oT ? oT.getLastRow() - 1 : 'none'));
-  const f = sT ? find('Settings', 'key', 'mr4') : null; say('Old reactions converted (Settings mr4): ' + (f ? f.o.value : 'NOT YET'));
+  const sh = n => book().getSheetByName(n), rowsOf = t => t ? Math.max(0, t.getLastRow() - 1) : 'MISSING';
+  const mrT = sh('MsgState'), cT = sh('MsgCounts'), iT = sh('MsgInbox'), sT = sh('Settings');
+  say('Tabs: MsgState=' + rowsOf(mrT) + ' rows, MsgCounts=' + rowsOf(cT) + ' rows, MsgInbox=' + rowsOf(iT) + ' waiting. Old tabs (read only): MsgReactions=' + (sh('MsgReactions') ? rowsOf(sh('MsgReactions')) : 'none') + ', MsgReactionsOld=' + (sh('MsgReactionsOld') ? rowsOf(sh('MsgReactionsOld')) : 'none'));
+  const f = sT ? find('Settings', 'key', 'mr5') : null; say('Old reactions imported (Settings mr5): ' + (f ? f.o.value : 'NOT YET'));
+  const warn = []; ['MsgState', 'MsgCounts', 'MsgInbox'].forEach(n => { const t = sh(n); if (!t) return; try { const dv = t.getRange(2, 1, Math.max(1, Math.min(t.getMaxRows() - 1, 200)), Math.max(1, t.getLastColumn())).getDataValidations(); if (dv.some(r => r.some(x => x))) warn.push(n); } catch (e) {} });
+  if (warn.length) say('WARNING: these tabs have dropdown / validation rules: ' + warn.join(', ') + '. Select the tab, Data > Data validation > Remove all. (A Google Sheets "Table" on them can also block writes: right-click it > Convert to range.)');
   let st = [];
   if (mrT && mrT.getLastRow() > 1) {
     st = mrT.getRange(2, 1, mrT.getLastRow() - 1, 4).getValues();
     let good = 0, known = 0, odd = 0; const msgs = {};
     st.forEach(r => { if (MSG_EMO.indexOf(String(r[2])) >= 0) good++; if (idSet[String(r[0])]) { known++; msgs[String(r[0])] = 1; } if (typeof r[0] !== 'string' || typeof r[1] !== 'string') odd++; });
-    say('MsgReactions: ' + good + ' live reactions, ' + known + ' rows point to a message that exists (' + Object.keys(msgs).length + ' different messages), ' + (st.length - known) + ' rows point to a message that does NOT exist, ' + odd + ' rows have a non-text id (should be 0)');
+    say('MsgState: ' + good + ' live reactions, ' + known + ' rows point to a message that exists (' + Object.keys(msgs).length + ' different messages), ' + (st.length - known) + ' rows point to a message that does NOT exist, ' + odd + ' rows have a non-text id (should be 0)');
     say('First 3 rows: ' + JSON.stringify(st.slice(0, 3)));
   }
   const want = tallies(st.map(r => [String(r[0]), String(r[1]), String(r[2] || '')]), idSet), have = readCounts();
-  let diff = 0; Object.keys(want).concat(Object.keys(have)).filter((k, i, a) => a.indexOf(k) === i).forEach(k => { { const n = o => MSG_EMO.map(e => (o && o[e]) || 0).join(','); if (n(want[k]) !== n(have[k])) diff++; } });
+  let diff = 0; Object.keys(want).concat(Object.keys(have)).filter((k, i, a) => a.indexOf(k) === i).forEach(k => { const n = o => MSG_EMO.map(e => (o && o[e]) || 0).join(','); if (n(want[k]) !== n(have[k])) diff++; });
   say('MsgCounts matches the reactions? ' + (diff ? 'NO: ' + diff + ' messages differ (run repair())' : 'yes'));
   if (iT && iT.getLastRow() > 1) say('Inbox waiting: ' + (iT.getLastRow() - 1) + ' tap(s). First: ' + iT.getRange(2, 1).getValue());
   const c = cache(), mp = metaOf(c.get('b_pub')), mm = metaOf(c.get('b_mr')); say('Cache: public data ' + (mp ? Math.round((Date.now() - mp.at) / 1000) + ' s old' : 'empty') + ', reaction totals ' + (mm ? 'present' : 'empty'));
@@ -486,7 +489,17 @@ function diagnose() {                                   // read-only: shows what
   say('Last server error: ' + (le || 'none recorded'));
   return L.join('\n');
 }
+function compactState() {                              // MsgState back to ONE row per (message, device): the last row of a pair wins, removed / unknown reactions go. Fixes a tab restored from an old copy (version history)
+  const t = tab('MsgState'), lr = t.getLastRow(); if (lr < 2) return 0;
+  const v = t.getRange(2, 1, lr - 1, 4).getValues(), last = {}, order = [];
+  v.forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });
+  const ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
+  const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
+  t.getRange(2, 1, lr - 1, 4).clearContent();
+  if (keep.length) t.getRange(2, 1, keep.length, 4).setNumberFormat('@').setValues(keep);
+  return keep.length;
+}
 function repair() {                                     // rebuilds the totals from the reactions in the sheet and applies anything waiting. Safe to run any time.
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
-  try { cache().remove('mr4ok'); migrateOnce(); fold(); recount(); bump(); Logger.log('Repaired. Run diagnose() to check.'); } finally { lock.releaseLock(); }
+  try { cache().remove('mr5ok'); migrateOnce(); const imp = importLegacy(), n = compactState(); fold(); recount(); bump(); Logger.log('Repaired: ' + imp + ' old reactions imported, ' + n + ' reactions kept. Run diagnose() to check.'); } finally { lock.releaseLock(); }
 }
