@@ -163,17 +163,26 @@ function blobGet(name, meta) {                         // -> {v, at, str} or nul
 function bump() { const c = cache(); c.remove('b_pub'); c.remove('b_mr'); }      // throw the public data away: the next read rebuilds it from the sheets
 
 /* ---------- reactions: inbox -> fold -> state + counts ---------- */
+function noteErr(where, err) {                         // remember the last server-side problem (Script properties) so diagnose() can show it
+  try { console.error(where, err); PropertiesService.getScriptProperties().setProperty('lastErr', new Date().toISOString() + ' ' + where + ': ' + String((err && err.stack) || err).slice(0, 500)); } catch (e) {}
+}
 function migrateOnce() {                                // old format: MsgReactions was an append-only LOG (several rows per device). New format: one row per device and message
   const c = cache(); if (c.get('mr4ok')) return;
   const f = find('Settings', 'key', 'mr4'); if (f && String(f.o.value) === '1') { c.put('mr4ok', '1', 21600); return; }
-  const t = tab('MsgReactions'), lr = t.getLastRow();
-  if (lr > 1) {
-    const v = t.getRange(2, 1, lr - 1, 4).getValues(), last = {}, order = [];
-    v.forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });   // the last row of a pair is that device's current reaction
-    const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0);
-    t.getRange(2, 1, lr - 1, 4).clearContent();
-    if (keep.length) { const to = 1 + keep.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); t.getRange(2, 1, keep.length, 4).setNumberFormat('@').setValues(keep); }
+  const ss = book(), t = tab('MsgReactions'), lr = t.getLastRow();
+  let bk = ss.getSheetByName('MsgReactionsOld');                                    // a copy of the raw log is kept FIRST: nothing is ever cleared before it exists
+  const live = lr > 1 ? t.getRange(2, 1, lr - 1, 4).getValues() : [];
+  if (!bk && live.length) {
+    bk = ss.insertSheet('MsgReactionsOld'); bk.getRange(1, 1, 1, 4).setValues([HEAD.MsgReactions]);
+    if (live.length + 1 > bk.getMaxRows()) bk.insertRowsAfter(bk.getMaxRows(), live.length + 1 - bk.getMaxRows());
+    bk.getRange(2, 1, live.length, 4).setNumberFormat('@').setValues(live.map(r => r.map(x => String(x == null ? '' : x))));
   }
+  const old = bk && bk.getLastRow() > 1 ? bk.getRange(2, 1, bk.getLastRow() - 1, 4).getValues() : [];   // the original log (if an earlier attempt died half way, it is converted again from here)
+  const last = {}, order = [];
+  old.concat(live).forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });   // the last row of a pair is that device's current reaction
+  const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0);
+  if (lr > 1) t.getRange(2, 1, lr - 1, 4).clearContent();
+  if (keep.length) { const to = 1 + keep.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); t.getRange(2, 1, keep.length, 4).setNumberFormat('@').setValues(keep); }
   recount();
   put('Settings', { key: 'mr4', value: '1' }); c.put('mr4ok', '1', 21600);
 }
@@ -252,7 +261,7 @@ function msgReact(d) {                                  // a tap on a wall messa
   try {
     inboxAdd((em || 'none') + '|' + id + '|' + dev + '|' + new Date().toISOString());
     let r = null;
-    if (!queued || foldDue()) { try { r = fold(); } catch (err) { console.error(err); } }   // quiet site: fold at once (the tap shows for everybody immediately). Busy site: one fold per FOLD_GAP handles the whole queue. A failed fold is harmless: the tap is safe in the inbox and the next fold applies it
+    if (!queued || foldDue()) { try { r = fold(); } catch (err) { noteErr('fold(tap)', err); } }   // quiet site: fold at once (the tap shows for everybody immediately). Busy site: one fold per FOLD_GAP handles the whole queue. A failed fold is harmless: the tap is safe in the inbox and the next fold applies it
     if (r && !r.valid[id]) return out({ ok: 0, error: 'nomsg' });                    // the message was deleted meanwhile
     return out(r ? { ok: 1, counts: r.cnt[id] || {} } : { ok: 1, pending: 1 });
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
@@ -265,7 +274,7 @@ function maybeFold() {                                  // a reader helps: if ta
   const lock = LockService.getScriptLock(); let got = false;
   try { got = lock.tryLock(500); } catch (x) {}
   if (!got) return;
-  try { fold(); } catch (err) { console.error(err); } finally { lock.releaseLock(); }
+  try { fold(); } catch (err) { noteErr('fold(reader)', err); } finally { lock.releaseLock(); }
 }
 
 /* ---------- public data: built once, kept in a few cache entries, patched in place by writes ---------- */
@@ -450,3 +459,34 @@ const ACT = {
     return out({ ok: 1 });
   }
 };
+
+/* ---------- maintenance: run these from the Apps Script editor (select the function, press Run, then View > Logs) ---------- */
+function diagnose() {                                   // read-only: shows what the reactions look like inside the sheet, and the last server error
+  const L = []; const say = s => { L.push(s); Logger.log(s); };
+  const ids = msgOrder().ids, idSet = {}; ids.forEach(i => idSet[i] = 1);
+  say('Messages: ' + ids.length + ' rows');
+  const sh = n => { const t = book().getSheetByName(n); return t ? t : null; };
+  const mrT = sh('MsgReactions'), cT = sh('MsgCounts'), iT = sh('MsgInbox'), oT = sh('MsgReactionsOld'), sT = sh('Settings');
+  say('Tabs: MsgReactions=' + (mrT ? mrT.getLastRow() - 1 : 'MISSING') + ' rows, MsgCounts=' + (cT ? cT.getLastRow() - 1 : 'MISSING') + ' rows, MsgInbox=' + (iT ? iT.getLastRow() - 1 : 'MISSING') + ' waiting, MsgReactionsOld(backup of the old log)=' + (oT ? oT.getLastRow() - 1 : 'none'));
+  const f = sT ? find('Settings', 'key', 'mr4') : null; say('Old reactions converted (Settings mr4): ' + (f ? f.o.value : 'NOT YET'));
+  let st = [];
+  if (mrT && mrT.getLastRow() > 1) {
+    st = mrT.getRange(2, 1, mrT.getLastRow() - 1, 4).getValues();
+    let good = 0, known = 0, odd = 0; const msgs = {};
+    st.forEach(r => { if (MSG_EMO.indexOf(String(r[2])) >= 0) good++; if (idSet[String(r[0])]) { known++; msgs[String(r[0])] = 1; } if (typeof r[0] !== 'string' || typeof r[1] !== 'string') odd++; });
+    say('MsgReactions: ' + good + ' live reactions, ' + known + ' rows point to a message that exists (' + Object.keys(msgs).length + ' different messages), ' + (st.length - known) + ' rows point to a message that does NOT exist, ' + odd + ' rows have a non-text id (should be 0)');
+    say('First 3 rows: ' + JSON.stringify(st.slice(0, 3)));
+  }
+  const want = tallies(st.map(r => [String(r[0]), String(r[1]), String(r[2] || '')]), idSet), have = readCounts();
+  let diff = 0; Object.keys(want).concat(Object.keys(have)).filter((k, i, a) => a.indexOf(k) === i).forEach(k => { { const n = o => MSG_EMO.map(e => (o && o[e]) || 0).join(','); if (n(want[k]) !== n(have[k])) diff++; } });
+  say('MsgCounts matches the reactions? ' + (diff ? 'NO: ' + diff + ' messages differ (run repair())' : 'yes'));
+  if (iT && iT.getLastRow() > 1) say('Inbox waiting: ' + (iT.getLastRow() - 1) + ' tap(s). First: ' + iT.getRange(2, 1).getValue());
+  const c = cache(), mp = metaOf(c.get('b_pub')), mm = metaOf(c.get('b_mr')); say('Cache: public data ' + (mp ? Math.round((Date.now() - mp.at) / 1000) + ' s old' : 'empty') + ', reaction totals ' + (mm ? 'present' : 'empty'));
+  let le = ''; try { le = PropertiesService.getScriptProperties().getProperty('lastErr') || ''; } catch (e) {}
+  say('Last server error: ' + (le || 'none recorded'));
+  return L.join('\n');
+}
+function repair() {                                     // rebuilds the totals from the reactions in the sheet and applies anything waiting. Safe to run any time.
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try { cache().remove('mr4ok'); migrateOnce(); fold(); recount(); bump(); Logger.log('Repaired. Run diagnose() to check.'); } finally { lock.releaseLock(); }
+}

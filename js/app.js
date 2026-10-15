@@ -384,7 +384,7 @@ function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open')
  if(!was&&c.closest('#wall')){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
   if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
 const rxDraw=id=>{const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q),m=msgById(id);if(c&&m)rxFoot(c,m)};
-const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
+const RECHK={};const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
 const RX_NO=['nomsg','emoji','noauth','action'];          // the only answers that mean "this can never work"; anything else (busy, network, server) is retried
 function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
  if(!RXB[id])RXBASE[id]={c:Object.assign({},RX[id]||{}),m:prev};
@@ -406,6 +406,7 @@ const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},no
  /* server totals win, except for a message I tapped in the last 30 s (or whose tap is not confirmed yet): the server may not have folded my tap into its totals, so show it anyway */
  const inWin=new Set(rp.messages.map(m=>String(m.id)));      // notes loaded from older pages keep their own totals
  new Set([...Object.keys(s),...[...Object.keys(RX),...Object.keys(MINE)].filter(id=>inWin.has(id))]).forEach(id=>{const k=Object.assign({},s[id]||{});
+  if(inWin.has(id)&&MINE[id]&&!hot(id)&&!(k[MINE[id]]>0)&&!RECHK[id]){RECHK[id]=1;setTimeout(()=>{if(MINE[id]&&!RXB[id])syncRx(id)},1500)}      // the server does not list MY reaction (lost on its side?): send it again, once per visit. Harmless if it was only a stale copy: the server keeps one reaction per device
   if(hot(id)){const m=MINE[id]||'',p=PEND[id]||'';if(p&&p!==m&&k[p]>0)k[p]--;if(m&&!(k[m]>0))k[m]=1}
   Object.keys(k).forEach(e=>{if(!(k[e]>0))delete k[e]});if(Object.keys(k).length)RX[id]=k;else delete RX[id]})};
 addEventListener('click',e=>{if(!e.target.closest('#wall .msg,#pinwrap .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
