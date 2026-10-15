@@ -56,6 +56,7 @@ function tab(n) {
   }
   return TABS[n] = t;
 }
+function txt(r) { try { r.setNumberFormat('@'); } catch (e) {} return r; }          // plain-text cells; a Google Sheets Table column refuses a number format ("can't set the number format in a typed column"), and that must never stop a write
 function heads(t) { return t.getRange(1, 1, 1, t.getLastColumn()).getValues()[0].map(String); }
 function asObj(h, r) { const o = {}; h.forEach((k, i) => o[k] = r[i]); return o; }
 function rows(n) { const v = tab(n).getDataRange().getValues(), h = v.shift().map(String); return v.map(r => asObj(h, r)); }
@@ -67,7 +68,7 @@ function tailRows(n, k) {                              // the last k data rows o
 function put(n, o) {
   const t = tab(n), h = heads(t), r = t.getLastRow() + 1;
   if (r > t.getMaxRows()) t.insertRowsAfter(t.getMaxRows(), 500);
-  t.getRange(r, 1, 1, h.length).setNumberFormat('@').setValues([h.map(k => o[k] == null ? '' : String(o[k]))]);
+  txt(t.getRange(r, 1, 1, h.length)).setValues([h.map(k => o[k] == null ? '' : String(o[k]))]);
 }
 function find(n, col, val) {                              // first row where col == val  ->  {row, o}  (row is 1-based)
   const v = tab(n).getDataRange().getValues(), h = v[0].map(String), c = h.indexOf(col);
@@ -76,14 +77,14 @@ function find(n, col, val) {                              // first row where col
 }
 function setRow(n, row, o) {
   const t = tab(n), h = heads(t);
-  Object.keys(o).forEach(k => { const c = h.indexOf(k); if (c >= 0) t.getRange(row, c + 1).setNumberFormat('@').setValue(String(o[k])); });
+  Object.keys(o).forEach(k => { const c = h.indexOf(k); if (c >= 0) txt(t.getRange(row, c + 1)).setValue(String(o[k])); });
 }
 function dropRows(n, test) {                           // delete every row where test(rowObject) is true, in a few calls; returns the removed rows (as objects)
   const t = tab(n), lr = t.getLastRow(), lc = t.getLastColumn(); if (lr < 2 || lc < 1) return [];
   const h = heads(t), v = t.getRange(2, 1, lr - 1, lc).getValues(), keep = [], gone = [];
   v.forEach(r => { const o = asObj(h, r); if (test(o)) gone.push(o); else keep.push(r); });
   if (!gone.length) return gone;
-  if (keep.length) t.getRange(2, 1, keep.length, lc).setNumberFormat('@').setValues(keep);   // write the survivors first ...
+  if (keep.length) txt(t.getRange(2, 1, keep.length, lc)).setValues(keep);   // write the survivors first ...
   t.getRange(keep.length + 2, 1, gone.length, lc).clearContent();                           // ... then clear the leftover rows (a failure in between can only duplicate a row, never lose one)
   return gone;
 }
@@ -177,7 +178,7 @@ function importLegacy() {                               // old reactions -> MsgS
   const st = tab('MsgState'), slr = st.getLastRow(), have = {}, ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
   if (slr > 1) st.getRange(2, 1, slr - 1, 2).getValues().forEach(r => have[String(r[0]) + '|' + String(r[1])] = 1);
   const add = order.filter(k => !have[k]).map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
-  if (add.length) { const to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); st.getRange(slr + 1, 1, add.length, 4).setNumberFormat('@').setValues(add); }
+  if (add.length) { const to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); txt(st.getRange(slr + 1, 1, add.length, 4)).setValues(add); }
   return add.length;
 }
 function migrateOnce() {                                // once: bring the reactions of earlier versions into MsgState (nothing old is changed or deleted)
@@ -203,7 +204,7 @@ function writeCounts(cnt) {                             // MsgCounts = the total
   const t = tab('MsgCounts'), lr = t.getLastRow();
   if (lr > 1) t.getRange(2, 1, lr - 1, 6).clearContent();
   const list = Object.keys(cnt).map(m => [m].concat(MSG_EMO.map(e => String(cnt[m][e] || 0))));
-  if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); t.getRange(2, 1, list.length, 6).setNumberFormat('@').setValues(list); }
+  if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); txt(t.getRange(2, 1, list.length, 6)).setValues(list); }
 }
 function recount() {                                    // rebuild MsgCounts from the state rows (safe to run any time from the editor: it repairs any drift)
   const t = tab('MsgState'), lr = t.getLastRow(), valid = {};
@@ -240,8 +241,8 @@ function fold() {                                       // CALLER HOLDS THE LOCK
     if (i >= sv.length) { add[i - sv.length][2] = em; return; }
     if (sv[i][2] !== em) { sv[i][2] = em; lo = lo < 0 ? i : Math.min(lo, i); hi = Math.max(hi, i); }
   });
-  if (hi >= 0) st.getRange(lo + 2, 3, hi - lo + 1, 1).setNumberFormat('@').setValues(sv.slice(lo, hi + 1).map(r => [r[2]]));     // only the emoji column of the rows that changed
-  if (add.length) { const from = slr + 1, to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); st.getRange(from, 1, add.length, 4).setNumberFormat('@').setValues(add); }
+  if (hi >= 0) txt(st.getRange(lo + 2, 3, hi - lo + 1, 1)).setValues(sv.slice(lo, hi + 1).map(r => [r[2]]));     // only the emoji column of the rows that changed
+  if (add.length) { const from = slr + 1, to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); txt(st.getRange(from, 1, add.length, 4)).setValues(add); }
   const cnt = tallies(sv.concat(add), valid);
   if (hi >= 0 || add.length) writeCounts(cnt);
   inb.getRange(2, 1, ilr - 1, 1).clearContent();        // only now: if anything above failed the taps stay in the inbox and the next fold applies them again (applying twice changes nothing)
@@ -443,7 +444,7 @@ const ACT = {
     const m = find('Messages', 'id', clean(d.id, 40)); if (!m) return out({ ok: 0, error: 'nomsg' });
     if (d.pin) {                                           // only one pinned message: clear the pin column first
       const t = tab('Messages'), c = heads(t).indexOf('pin'), lr = t.getLastRow();
-      if (c >= 0 && lr > 1) t.getRange(2, c + 1, lr - 1, 1).setNumberFormat('@').setValues(new Array(lr - 1).fill(['']));
+      if (c >= 0 && lr > 1) txt(t.getRange(2, c + 1, lr - 1, 1)).setValues(new Array(lr - 1).fill(['']));
     }
     setRow('Messages', m.row, { pin: d.pin ? '1' : '' });
     return out({ ok: 1 });                                 // the cached public data is rebuilt automatically after a write that does not patch it
@@ -496,7 +497,7 @@ function compactState() {                              // MsgState back to ONE r
   const ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
   const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
   t.getRange(2, 1, lr - 1, 4).clearContent();
-  if (keep.length) t.getRange(2, 1, keep.length, 4).setNumberFormat('@').setValues(keep);
+  if (keep.length) txt(t.getRange(2, 1, keep.length, 4)).setValues(keep);
   return keep.length;
 }
 function repair() {                                     // rebuilds the totals from the reactions in the sheet and applies anything waiting. Safe to run any time.
