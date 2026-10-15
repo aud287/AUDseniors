@@ -415,7 +415,7 @@ async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':r.error=='nomsg'?'That message no longer exists.':'Not saved. Check the admin key.');return}
  if(pin)MSG.forEach(x=>{x.pin=''});m.pin=pin?'1':'';msgs(MSG,pin?'top':undefined);toast(pin?'Pinned to the top.':'Unpinned.')}
 /* ---- staff badges: the class logo used like a verification mark. Tap it -> a tiny popup says who it is. Image files come from config.js (founderBadge / teamBadge) ---- */
-const BADGES={founder:{label:'المؤسس',cfg:'founderBadge'},team:{label:'تيم التخرج',cfg:'teamBadge'}};
+const BADGES={founder:{label:'المؤسس',cfg:'founderBadge'},team:{label:'AUD SENIORS 2026',cfg:'teamBadge'}};
 function vBadge(k){const d=BADGES[k],u=DR(G(d.cfg),1),use=safe(u)?u:CONFIG.logo,b=el('button','vbadge '+k),w=el('span','vi');
  b.type='button';b.setAttribute('aria-label',d.label);b.setAttribute('aria-expanded','false');
  if(ok(use)){const i=new Image();i.src=use;i.alt='';i.decoding='async';w.append(i)}else w.append(el('span','vt','✓'));      // no image at all: a plain check mark
