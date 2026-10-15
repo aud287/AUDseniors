@@ -441,6 +441,28 @@ $('#mlock').onclick=async()=>{if(ROLE!=='founder')return;const b=$('#mlock'),wan
  const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
  MLOCK=r.demo?want:!!r.locked;msgForm();toast(MLOCK?'Visitor messages are paused.':'Visitor messages are open again.')};
+function linkify(text){
+  const out=[], re=/(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
+  let last=0, m;
+  while((m=re.exec(text))){
+    let url=m[0], tail='';
+    const t=url.match(/[.,!?؟،:;)\]]+$/);          // شيل علامات الترقيم من آخر اللينك
+    if(t){tail=t[0];url=url.slice(0,-tail.length)}
+    if(m.index>last) out.push(document.createTextNode(text.slice(last,m.index)));
+    const href=/^www\./i.test(url)?'https://'+url:url;
+    if(/^https?:\/\//i.test(href)){
+      const a=document.createElement('a');
+      a.href=href; a.textContent=url;
+      a.target='_blank'; a.rel='noopener noreferrer nofollow ugc';
+      a.onclick=ev=>ev.stopPropagation();           // عشان الضغط على اللينك ميفتحش قائمة التفاعلات
+      out.push(a);
+    } else out.push(document.createTextNode(url));
+    if(tail) out.push(document.createTextNode(tail));
+    last=m.index+m[0].length;
+  }
+  if(last<text.length) out.push(document.createTextNode(text.slice(last)));
+  return out;
+}
 function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,240),t=new Date(m.date),okd=!!m.date&&!isNaN(t);
  const c=el('article','msg a'+(i%3)+(isPin(m)?' pinned':'')),hd=el('div','mh'),who=el('div','who'),b=el('b','',nm);b.dir='auto';who.append(b);
  if(m.badge==='founder'||m.badge==='team'){who.classList.add('vb');who.dir=/[\u0600-\u06FF]/.test(nm)?'rtl':'ltr';who.append(vBadge(m.badge))}      // founder / graduation-team mark right beside the name
