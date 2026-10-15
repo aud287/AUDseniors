@@ -42,10 +42,14 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const ok=u=>!!u&&!/^YOUR_/i.test(u),safe=u=>/^(https?:\/\/|data:image\/|\.{0,2}\/|assets\/)/i.test(u||"");
 const clean=(s,n)=>String(s||"").replace(/[<>]/g,"").replace(/javascript:/gi,"").trim().slice(0,n);
 const fmt=d=>{if(!d)return"";const t=new Date(d);return isNaN(t)?String(d):t.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})};   // a placeholder like SOON is shown as written instead of "Invalid Date"
-const ic=(v,c)=>{v=String(v||'');if(/^[a-z0-9_-]+$/.test(v)){const i=new Image();i.src='assets/icons/'+v+'.png';i.alt='';i.loading='lazy';i.decoding='async';i.className='i3 '+(c||'');return i}return el('span',c||'',v)};
+const ic=(v,c)=>{v=String(v||'');if(/^[a-z0-9_-]+$/.test(v)){const i=new Image();i.src='assets/icons/'+v+'.webp';i.alt='';i.loading='lazy';i.decoding='async';i.className='i3 '+(c||'');return i}return el('span',c||'',v)};
 const RM=matchMedia('(prefers-reduced-motion:reduce)').matches,GT=new Date(CONFIG.graduationDate).getTime(),gd=new Date(GT);
 document.documentElement.classList.add('js');
-function toast(t,ms){const x=$('#toast');x.textContent=t;x.classList.add('on');clearTimeout(x._t);x._t=setTimeout(()=>x.classList.remove('on'),ms||3200)}
+/* the toast is a popover so it sits in the browser's top layer: without that, a message shown while the full gallery (a modal dialog) is open would be hidden behind it */
+function toast(t,ms){const x=$('#toast');x.textContent=t;
+ try{if(x.showPopover){if(!x.hasAttribute('popover'))x.setAttribute('popover','manual');if(x.matches(':popover-open'))x.hidePopover();x.showPopover()}}catch(e){}
+ void x.offsetWidth;x.classList.add('on');clearTimeout(x._t);
+ x._t=setTimeout(()=>{x.classList.remove('on');x._t=setTimeout(()=>{try{if(x.matches(':popover-open'))x.hidePopover()}catch(e){}},500)},ms||3200)}
 $$('.cn').forEach(e=>e.textContent=CONFIG.className);
 $$('.gd').forEach(e=>e.textContent=gd.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}).toUpperCase());
 $$('.gs').forEach(e=>e.textContent=gd.toLocaleDateString('en-GB').replace(/\//g,'.'));
@@ -151,6 +155,12 @@ function vChips(){const all=MEM.filter(m=>!m.ev),n={};all.forEach(m=>{const c=vN
  const box=$('#vwchips');box.replaceChildren();
  [['ALL',all.length]].concat(Object.keys(n).map(c=>[c,n[c]])).forEach(([c,k])=>{const b=el('button','vw-chip');b.type='button';b.setAttribute('aria-pressed',String(c==VC));
   b.append(el('span','',c),el('i','',String(k)));b.onclick=()=>{if(VC==c)return;VC=c;vRefresh()};box.append(b)})}
+/* staff tools for one photo: delete it / block the device that sent it. Same actions as on the board, but reachable from every place a photo is shown in the gallery.
+   CSS shows them only while a staff link is active (body.adm), so they also appear if the key is accepted after the gallery was opened. Photos without an id (set in config.js) have nothing to delete. */
+function staffTools(m,cls,words){if(!m.id)return null;const w=el('div',cls);
+ const d=el('button','vw-del',words?'✕ Delete photo':'✕');d.type='button';d.setAttribute('aria-label','Delete photo');d.title='Delete photo';d.onclick=ev=>{ev.stopPropagation();del('photo',m.id)};w.append(d);
+ if(m.bn){const k=el('button','vw-ban',words?'🚫 Block device':'🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('photo',m)};w.append(k)}
+ return w}
 function vGo(d){if(VALL.length<2)return;GI=(GI+d+VALL.length)%VALL.length;vFill()}
 function vFill(){const m=VALL[GI];if(!m)return;const f=$('#vwfig'),solo=VW.classList.contains('solo');f.replaceChildren();
  const im=m.ev?ic(m.e||'🎓','em'):pic(m,GI,1);im.classList.add('vw-img');f.classList.remove('ld');
@@ -158,6 +168,7 @@ function vFill(){const m=VALL[GI];if(!m)return;const f=$('#vwfig'),solo=VW.class
  f.append(im);
  const cap=$('#vwcap');cap.replaceChildren();if(m.title)cap.append(el('h3','',m.title));if(m.cap&&m.cap!==m.title)cap.append(el('p','',m.cap));
  const meta=[m.cat,fmt(m.date)].filter(Boolean).join('  ·  ');if(meta)cap.append(el('small','',meta));
+ if(!solo){const t=staffTools(m,'vw-adm',1);if(t)cap.append(t)}
  if(!solo){$('#vwcount').textContent=(GI+1)+' / '+VALL.length;
   const s=$('#vwstrip');[...s.children].forEach((b,i)=>{const on=i===GI;b.classList.toggle('on',on);if(on)b.setAttribute('aria-current','true');else b.removeAttribute('aria-current')});
   const cur=s.children[GI];if(cur)s.scrollTo({left:cur.offsetLeft-(s.clientWidth-cur.offsetWidth)/2,behavior:'smooth'})}
@@ -170,13 +181,13 @@ function vGrid(){const g=$('#vwgrid');g.replaceChildren();let last='';VG=true;
   if(k&&k!==last){last=k;g.append(el('h4','vw-h',k))}
   const b=el('button','vw-cell'+(i===GI?' on':''));b.type='button';b.setAttribute('aria-label','Open photo '+(i+1)+(m.title?': '+m.title:''));
   const p=pic(m,i);p.loading=i<18?'eager':'lazy';b.append(p);if(m.cat)b.append(el('span','vw-cat',m.cat));if(m.title)b.append(el('span','vw-cp',m.title));
-  b.onclick=()=>{GI=i;vMode('view')};g.append(b)})}
+  b.onclick=()=>{GI=i;vMode('view')};const w=el('div','vw-w');w.append(b);const t=staffTools(m,'vw-tools');if(t)w.append(t);g.append(w)})}
 function vMode(m){VM=m;const grid=m=='grid';$('#vwview').hidden=grid;$('#vwgrid').hidden=!grid;
  $('#vwmv').setAttribute('aria-pressed',String(!grid));$('#vwmg').setAttribute('aria-pressed',String(grid));
  if(grid){if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));$('#vwcount').textContent=VALL.length+(VALL.length==1?' photo':' photos');
   const c=$('#vwgrid .vw-cell.on');if(c)requestAnimationFrame(()=>c.scrollIntoView({block:'center'}))}
  else vFill()}
-function vRefresh(){const keep=VALL[GI]&&pidOf(VALL[GI]);VALL=vList();const at=keep?VALL.findIndex(m=>pidOf(m)===keep):-1;GI=at<0?0:at;
+function vRefresh(near){const keep=VALL[GI]&&pidOf(VALL[GI]);VALL=vList();const at=keep?VALL.findIndex(m=>pidOf(m)===keep):-1;GI=at<0?Math.max(0,Math.min(near||0,VALL.length-1)):at;      // near = where the photo that just went away was, so the viewer lands on its neighbour
  vChips();vStrip();VG=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;
  const none=!VALL.length;$('#vwstage').hidden=none;
  if(none){$('#vwfig').replaceChildren();$('#vwcap').replaceChildren(el('p','','No photos in this category yet.'));$('#vwcount').textContent='0 photos'}
@@ -299,6 +310,10 @@ function pollsR(P){const w=$('#pl');w.replaceChildren();P.forEach((p,pi)=>{const
 
 /* ---- messages: one scroll box that shows 4 notes at a time (scroll up/down for the rest). Each note = avatar, name, time + a little date leaf ---- */
 let msgSort='new',msgFirst=true;const MSG_SHOW=4;
+/* NO LIMIT on notes. The first load carries the newest ~200; every older note is fetched automatically (100 at a time) as the reader scrolls toward the end of the box,
+   and all of them at once when sorted oldest-first. Only a slice is DRAWN at a time (SHOW_STEP cards, more as you scroll) so thousands of notes stay fast. */
+let MORE=0,CURSOR='',OLDER=[],WIN=[],PAGED=0,MLOAD=0,MFAIL=0,TOTAL=0;      // TOTAL = how many notes exist on the server (0 = not known)
+let SORTED=[],SHOWN=0,SHOW_N=100;const SHOW_STEP=100;                      // SORTED = every loaded note in display order · SHOWN = how many of them are drawn
 const isPin=m=>String(m.pin)==='1';                    // pinned message: always first, and it stays on screen while the wall scrolls
 const sortedMsgs=M=>M.filter(m=>m.status!=='pending').slice().sort((a,b)=>{if(isPin(a)!==isPin(b))return isPin(a)?-1:1;const A=String(a.date||''),B=String(b.date||'');return msgSort=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)});
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -313,8 +328,9 @@ const DEV=(()=>{let d='';try{d=localStorage.getItem('aud_dev')||''}catch(e){}
  try{localStorage.setItem('aud_dev',d)}catch(e){}
  try{document.cookie='aud_dev='+d+';max-age=315360000;path=/;SameSite=Lax'+(location.protocol=='https:'?';Secure':'')}catch(e){}
  return d})();
-let RX={};const RXT={},MINE=(()=>{try{return JSON.parse(localStorage.getItem('aud_mrx')||'{}')||{}}catch(e){return{}}})();      // RX: message id -> {love:n,...} · RXT: when I last changed it (a refresh cannot flicker it back for 20 s)
-const saveMine=()=>{try{localStorage.setItem('aud_mrx',JSON.stringify(MINE))}catch(e){}};
+const lsGet=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||d}catch(e){return d}},lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let RX={};const MINE=lsGet('aud_mrx',{}),RXT=lsGet('aud_mrt',{}),PEND=lsGet('aud_mrp',{});      // RX: message id -> {love:n,...} · MINE: my reaction per message · RXT: when I last changed it (a refresh cannot flicker it back for 30 s, even after a reload) · PEND: taps the server has not confirmed yet (id -> the reaction it had before); they are re-sent until confirmed
+const saveMine=()=>{lsSet('aud_mrx',MINE);lsSet('aud_mrt',RXT);lsSet('aud_mrp',PEND)};
 const msgById=id=>MSG.find(x=>String(x.id)===String(id));
 /* ---- replies: a reply is a brand-new message that remembers which message it answers. Tap a note -> the picker (reactions + a reply arrow) -> the form says who you are answering.
    The new note shows a small "Reply to NAME · first 30 characters" line above its name (tap it to jump to the original); the original gets a small reply icon + count left of its reactions. ---- */
@@ -328,7 +344,15 @@ function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)r
  setReply({id:String(m.id),name:clean(m.name,30)||'Anonymous',text:exc30(m.message)});
  try{($('#mn').value?$('#mt'):$('#mn')).focus({preventScroll:true})}catch(e){}                       // inside the tap, so phones open the keyboard
  $('#mf').scrollIntoView({behavior:'smooth',block:'center'})}
-function goMsg(id){const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q);
+async function revealMsg(id){const k=String(id);      // make sure a note is loaded AND drawn, however old it is (loads older pages until it turns up; false = it really is gone)
+ for(let g=0;g<800;g++){const i=SORTED.findIndex(x=>String(x.id)===k);
+  if(i>=0){if(i>=SHOWN){SHOW_N=i+SHOW_STEP;msgs(MSG)}return true}
+  if(MLOAD){await sleep(250);continue}
+  if(!MORE||MFAIL)return false;
+  await loadOlder()}
+ return false}
+async function goMsg(id){const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',S='#pinwrap '+q+',#wall '+q;let c=$(S);
+ if(!c){toast('Finding the original note…',1800);await revealMsg(id);c=$(S)}
  if(!c)return toast(errText('gone'));closeRx();const w=$('#wall'),sm=RM?'auto':'smooth';
  /* put the original in the MIDDLE of the screen: 1) centre it inside the scrolling box, 2) then scroll the page so that spot is the middle of the screen */
  let top=c.getBoundingClientRect().top;                                                          // where it is on screen right now
@@ -361,19 +385,29 @@ function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open')
   if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
 const rxDraw=id=>{const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q),m=msgById(id);if(c&&m)rxFoot(c,m)};
 const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
+const RX_NO=['nomsg','emoji','noauth','action'];          // the only answers that mean "this can never work"; anything else (busy, network, server) is retried
 function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
  if(!RXB[id])RXBASE[id]={c:Object.assign({},RX[id]||{}),m:prev};
+ if(!(id in PEND))PEND[id]=prev;
  const k=RX[id]=RX[id]||{};if(prev&&k[prev])k[prev]=Math.max(0,k[prev]-1);if(key)k[key]=(k[key]||0)+1;
- if(key)MINE[id]=key;else delete MINE[id];saveMine();RXT[id]=Date.now();rxDraw(id);syncRx(id)}
-/* one request at a time per message, always carrying the LATEST choice: quick taps (change, remove, change again) can never reach the server out of order */
+ if(key)MINE[id]=key;else delete MINE[id];RXT[id]=Date.now();saveMine();rxDraw(id);syncRx(id)}
+/* one request at a time per message, always carrying the LATEST choice: quick taps (change, remove, change again) can never reach the server out of order.
+   A busy server or a bad connection never takes the tap back: it stays on screen, is kept on this device and is sent again (a few times now, and again on the next visit). */
 async function syncRx(id){if(RXB[id]){RXD[id]=1;return}RXB[id]=1;
- try{for(;;){RXD[id]=0;const r=await api({action:'msgreact',id:String(id),emoji:MINE[id]||'',dev:DEV});
-  if(!r.ok&&!r.demo){const b=RXBASE[id];if(b){RX[id]=b.c;if(b.m)MINE[id]=b.m;else delete MINE[id];saveMine()}RXD[id]=0;rxDraw(id);console.warn('reaction not saved',r);
-   toast(r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction. Try again.'+(ADM?' ['+(r.error||'?')+(r.detail?': '+r.detail:'')+']':''),ADM?9000:undefined);return}
-  if(RXD[id])continue;if(r.counts)RX[id]=r.counts;RXT[id]=Date.now();rxDraw(id);return}}
+ try{for(let n=0;;){RXD[id]=0;const sent=MINE[id]||'';const r=await api({action:'msgreact',id:String(id),emoji:sent,dev:DEV},{tries:3});
+  if(r.ok||r.demo){if(RXD[id]||(MINE[id]||'')!==sent)continue;delete PEND[id];delete RXBASE[id];RXT[id]=Date.now();saveMine();if(r.counts)RX[id]=r.counts;rxDraw(id);return}
+  if(RX_NO.indexOf(r.error)>=0){const b=RXBASE[id];if(b){RX[id]=b.c;if(b.m)MINE[id]=b.m;else delete MINE[id]}delete PEND[id];delete RXBASE[id];saveMine();RXD[id]=0;rxDraw(id);console.warn('reaction refused',r);
+   toast(r.error=='nomsg'?'That message is no longer there.':r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction.',ADM?9000:undefined);return}
+  if(++n>=6){console.warn('reaction will be retried later',r);return}               // stays in PEND: sent again when the page comes back online / on the next visit
+  await sleep(Math.min(30000,1500*n*n))}}
  finally{RXB[id]=0}}
-const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now();
- Object.keys(s).forEach(id=>{if(now-(RXT[id]||0)>2e4)RX[id]=s[id]});Object.keys(RX).forEach(id=>{if(!(id in s)&&now-(RXT[id]||0)>2e4)delete RX[id]})};
+function flushPend(){Object.keys(PEND).forEach(id=>{if(!RXB[id])syncRx(id)})}
+const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now(),hot=id=>(id in PEND)||now-(RXT[id]||0)<3e4;
+ /* server totals win, except for a message I tapped in the last 30 s (or whose tap is not confirmed yet): the server may not have folded my tap into its totals, so show it anyway */
+ const inWin=new Set(rp.messages.map(m=>String(m.id)));      // notes loaded from older pages keep their own totals
+ new Set([...Object.keys(s),...[...Object.keys(RX),...Object.keys(MINE)].filter(id=>inWin.has(id))]).forEach(id=>{const k=Object.assign({},s[id]||{});
+  if(hot(id)){const m=MINE[id]||'',p=PEND[id]||'';if(p&&p!==m&&k[p]>0)k[p]--;if(m&&!(k[m]>0))k[m]=1}
+  Object.keys(k).forEach(e=>{if(!(k[e]>0))delete k[e]});if(Object.keys(k).length)RX[id]=k;else delete RX[id]})};
 addEventListener('click',e=>{if(!e.target.closest('#wall .msg,#pinwrap .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
 /* admin: pin a message (a pinned note stays first and stays on screen while the wall scrolls). Admins can pin / unpin / delete, but never edit what someone wrote. */
 async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,pin:pin});
@@ -401,7 +435,7 @@ function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('
  if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
  else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
  note.hidden=!note.childNodes.length;
- if(bar){bar.hidden=ROLE!=='founder';$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
+ if(bar){bar.hidden=!ADM;$('#mlock').hidden=ROLE!=='founder';$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
 $('#mlock').onclick=async()=>{if(ROLE!=='founder')return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
  const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
@@ -416,29 +450,57 @@ function msgCard(m,i){const nm=clean(m.name,30)||'Anonymous',tx=clean(m.message,
  const p=el('p','mt'+(/[\u0600-\u06FF]/.test(tx)?' ar':''),tx);p.dir='auto';if(isPin(m))c.append(el('small','pinb','\uD83D\uDCCC PINNED'));if(m.reply)c.append(replyLine(m));c.append(hd,p);return c}
 function fitWall(){const w=$('#wall'),k=w.children,n=MSG_SHOW-($('#pinwrap').hidden?0:1);w.style.maxHeight='';if(k.length<=n||!k[n].classList.contains('msg'))return;      // a pinned note sits above the box and takes one of the slots
  const cs=getComputedStyle(w),g=parseFloat(cs.rowGap)||0,pb=parseFloat(cs.paddingBottom)||0;w.style.maxHeight=(k[n].offsetTop-g+pb)+'px'}      // exactly 4 notes tall
-function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=w.scrollTop;w.replaceChildren();pw.replaceChildren();
- REPLIES={};all.forEach(x=>{if(x.reply)REPLIES[x.reply]=(REPLIES[x.reply]||0)+1});
- if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
- all.forEach((m,i)=>{const c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
+function addCards(to){const w=$('#wall'),pw=$('#pinwrap');                      // draw SORTED[SHOWN..to)
+ SORTED.slice(SHOWN,to).forEach((m,k)=>{const i=SHOWN+k,c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
   if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
   c.onclick=e=>{if(!e.target.closest('button'))toggleRx(c,m)};c.onkeydown=e=>{if(e.target===c&&(e.key=='Enter'||e.key==' ')){e.preventDefault();toggleRx(c,m)}};rxFoot(c,m);
   if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d);
    const p=el('button','mbtn mp'+(isPin(m)?' on':''),'📌');p.type='button';                              // admin only (hidden for visitors): pin / unpin
    p.setAttribute('aria-label',isPin(m)?'Unpin message':'Pin message');p.title=isPin(m)?'Unpin':'Pin to top';
    p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p);
-   if(m.bn&&!m.badge){const k=el('button','mbtn mb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device (founder)';k.onclick=ev=>{ev.stopPropagation();openBan('message',m)};c.append(k)}}
+   if(m.bn&&!m.badge){const k=el('button','mbtn mb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('message',m)};c.append(k)}}
   (i===0&&isPin(m)?pw:w).append(c)});      // the pinned note lives ABOVE the scrolling box: the rest scrolls below it with the normal gap and never slides under it
+ SHOWN=Math.max(SHOWN,to)}
+function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=w.scrollTop;w.replaceChildren();pw.replaceChildren();
+ REPLIES={};all.forEach(x=>{if(x.reply)REPLIES[x.reply]=(REPLIES[x.reply]||0)+1});
+ SORTED=all;SHOWN=0;SHOW_N=where=='top'?SHOW_STEP:where=='end'?all.length:Math.max(SHOW_N,SHOW_STEP);      // a new note / a re-sort starts from the top; a background refresh keeps what was drawn
+ if(!all.length)w.append(el('p','empty','No notes yet. Be the first to leave one ✨'));
+ addCards(Math.min(all.length,SHOW_N));
  pw.hidden=!(all.length&&isPin(all[0]));if(all.length)msgFirst=false;fitWall();w.scrollTop=where=='top'?0:where=='end'?w.scrollHeight:st;      // new notes / re-sort jump to the right end; background refreshes keep your place
- $('#mcnt').textContent=all.length+(all.length==1?' message':' messages')+(all.length>MSG_SHOW?' · scroll to read them all':'')}
-$('#msort').onchange=e=>{msgSort=e.target.value;msgs(MSG,'top')};
+ const tot=Math.max(all.length,TOTAL);$('#mcnt').textContent=tot+(TOTAL?'':MORE?'+':'')+(tot==1?' message':' messages')+(tot>MSG_SHOW?' · scroll to read them all':'');
+ mMore();if(msgSort=='old'&&MORE&&!MLOAD&&!MFAIL)loadOlder(true);else requestAnimationFrame(wallMore)}      // oldest-first needs every page: fetch them all
+/* the reader nears the end of what is drawn: draw the next slice; nothing left to draw: fetch the next page of older notes */
+function wallMore(){const w=$('#wall');if(!w||!SORTED.length)return;
+ if(w.scrollHeight-w.scrollTop-w.clientHeight>1800)return;
+ if(SHOWN<SORTED.length){addCards(Math.min(SORTED.length,SHOWN+SHOW_STEP));SHOW_N=Math.max(SHOW_N,SHOWN);requestAnimationFrame(wallMore);return}
+ if(MORE&&!MLOAD&&!MFAIL)loadOlder()}
+$('#wall').addEventListener('scroll',wallMore,{passive:true});
+function mMore(){const b=$('#mmore');if(!b)return;b.hidden=!(MORE&&(MLOAD||MFAIL));b.disabled=!!MLOAD;b.textContent=MLOAD?'LOADING OLDER NOTES…':'COULD NOT LOAD · TAP TO RETRY'}      // normally invisible: older notes load by themselves; it only shows progress / a retry after an error
+function withOlder(rp){const w=rp.messages||[],ids=new Set(w.map(m=>String(m.id)));
+ const lo=w.reduce((a,m)=>{const d=String(m.date||'');return d&&(!a||d<a)?d:a},'');
+ WIN.forEach(m=>{const k=String(m.id||'');if(k&&!ids.has(k)&&String(m.date||'')<=lo&&!OLDER.some(o=>String(o.id)===k))OLDER.push(m)});      // a note that slid out of the newest window (new notes arrived) keeps its place
+ WIN=w;OLDER=OLDER.filter(m=>!ids.has(String(m.id)));
+ if(!PAGED){CURSOR=rp.oldest||'';MORE=rp.more?1:0}
+ if(rp.total!=null)TOTAL=rp.total;
+ return w.concat(OLDER)}
+async function loadOlder(all){if(MLOAD||!MORE||!CURSOR||!BACKEND.enabled)return;MLOAD=1;MFAIL=0;mMore();
+ try{do{const r=await getJSON(BACKEND.apiUrl+'?scope=msgs&before='+encodeURIComponent(CURSOR)+(all?'&n=300':''),{tries:3,timeout:20000});
+  if(r.err){MFAIL=1;toast('Could not load older notes. Trying again soon.');setTimeout(()=>{MFAIL=0;mMore();wallMore()},15000);break}
+  const j=r.j,seen=new Set(MSG.map(m=>String(m.id))),fresh=(j.messages||[]).filter(m=>!seen.has(String(m.id))),now=Date.now();
+  if(j.total!=null)TOTAL=j.total;OLDER.push(...fresh);MSG=MSG.concat(fresh);PAGED=1;CURSOR=j.oldest||CURSOR;MORE=j.more&&j.oldest&&!j.gone?1:0;
+  Object.keys(j.mr||{}).forEach(id=>{if(!((id in PEND)||now-(RXT[id]||0)<3e4))RX[id]=j.mr[id]})}while(all&&MORE)}
+ finally{MLOAD=0}
+ msgs(MSG)}
+$('#msort').onchange=e=>{msgSort=e.target.value;MFAIL=0;msgs(MSG,'top')};
+{const b=$('#mmore');if(b)b.onclick=()=>{MFAIL=0;loadOlder(msgSort=='old')}}
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
 $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
  const rp=REPLY,form=e.target,btn=form.querySelector('.btn'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
  if(rp){tmp.reply=rp.id;tmp.rname=rp.name;tmp.rtext=rp.text}
- if(btn)btn.disabled=true;MSG.unshift(tmp);msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
+ if(btn)btn.disabled=true;MSG.unshift(tmp);if(TOTAL)TOTAL++;msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
  const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await api(pl);if(btn)btn.disabled=false;
- if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return r.error=='banned'?showBan(r):toast(errText(r.error))}
+ if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);if(TOTAL)TOTAL--;msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return r.error=='banned'?showBan(r):toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
 /* ---- events ---- */
@@ -450,12 +512,25 @@ $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errTe
 
 /* ---- socials + announcements ---- */
 
+/* inline SVG icons (simple-icons, CC0): no icon-font download, no layout shift */
+const SOC_PATH = {
+  instagram: 'M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077',
+  facebook: 'M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z',
+  x: 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z',
+  telegram: 'M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z'
+};
+const socIcon = k => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false');
+  p.setAttribute('d', SOC_PATH[k]); p.setAttribute('fill', 'currentColor'); s.append(p); return s;
+};
+
 [
-  ['instagram', 'fa-brands fa-instagram', 'Instagram'],
-  ['facebook', 'fa-brands fa-facebook-f', 'Facebook'],
-  ['x', 'fa-brands fa-x-twitter', 'X'],
-  ['telegram', 'fa-brands fa-telegram', 'Telegram']
-].forEach(([k, icon, name]) => {
+  ['instagram', 'Instagram'],
+  ['facebook', 'Facebook'],
+  ['x', 'X'],
+  ['telegram', 'Telegram']
+].forEach(([k, name]) => {
 
   const a = el('a', 'card glass soc');
 
@@ -466,12 +541,8 @@ $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errTe
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
 
-  const iconElement = el('i', icon);
-
-  iconElement.setAttribute(
-    'aria-hidden',
-    'true'
-  );
+  const iconElement = el('i');
+  iconElement.append(socIcon(k));
 
   a.append(
     iconElement,
@@ -598,8 +669,8 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
 let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
-/* ---- blocking a device from posting. The browser keeps an anonymous id (DEV); the backend remembers which id wrote each message / photo, so the founder can block it from messages, photos or both, for any span.
-   Blocked people can still browse everything; when they try to post they see how long the block is and how much is left. The founder lifts a block early from "BLOCKED DEVICES". ---- */
+/* ---- blocking a device from posting. The browser keeps an anonymous id (DEV); the backend remembers which id wrote each message / photo, so the admin or founder can block it from messages, photos or both, for any span.
+   Blocked people can still browse everything; when they try to post they see how long the block is and how much is left. Admin or founder lifts a block early from "BLOCKED DEVICES". ---- */
 const addCal=(t0,Y,M)=>{const d=new Date(t0),day=d.getUTCDate();d.setUTCDate(1);d.setUTCFullYear(d.getUTCFullYear()+Y);d.setUTCMonth(d.getUTCMonth()+M);d.setUTCDate(Math.min(day,new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate()));return d.getTime()};      // same calendar maths as the backend
 function spanOf(a,b){if(b<=a)return{y:0,mo:0,d:0,h:0,m:0,s:0};let y=0,mo=0;while(addCal(a,y+1,0)<=b)y++;while(addCal(a,y,mo+1)<=b)mo++;
  let r=b-addCal(a,y,mo);const d=Math.floor(r/864e5);r-=d*864e5;const h=Math.floor(r/36e5);r-=h*36e5;const m=Math.floor(r/6e4);r-=m*6e4;return{y,mo,d,h,m,s:Math.floor(r/1e3)}}
@@ -619,8 +690,8 @@ function showBan(i){const dlg=$('#bn'),skew=(i.now||Date.now())-Date.now(),w=BN_
  const tick=()=>{const now=Date.now()+skew,rem=i.until-now;live.forEach(([n,lang])=>{n.textContent=rem>0?fmtSpan(spanOf(now,i.until),lang,rem<36e5):(lang=='ar'?'انتهى الحظر، جرّب مرة أخرى':'Finished. Try again now.')})};
  clearInterval(bnT);tick();bnT=setInterval(tick,1000);if(!dlg.open)dlg.showModal()}
 $('#bn').addEventListener('close',()=>clearInterval(bnT));
-/* founder: the "Block this device" window */
-const BAN_ERR={nodev:"This one was posted before devices were tracked (or by staff), so it can't be blocked.",gone:'That message / photo was already deleted, so its device is unknown.',span:'Enter a duration of at least 1 hour (whole numbers).',what:'Choose what to block.',founder:'Only the founder link can block devices.',key:'The founder key was not accepted. Reopen the founder link.'};
+/* admin / founder: the "Block this device" window */
+const BAN_ERR={nodev:"This one was posted before devices were tracked (or by staff), so it can't be blocked.",gone:'That message / photo was already deleted, so its device is unknown.',span:'Enter a duration of at least 1 hour (whole numbers).',what:'Choose what to block.',founder:'Only the admin or founder link can block devices.',key:'The key was not accepted. Reopen the admin / founder link.'};
 let BD=null;
 function bdRead(){const n=id=>{const v=$(id).value.trim();return v===''?0:Number(v)},Y=n('#bdy'),Mo=n('#bdmo'),D=n('#bdd'),H=n('#bdh'),ok=[Y,Mo,D,H].every(x=>Number.isInteger(x)&&x>=0&&x<=9999);return{Y,Mo,D,H,ok,zero:ok&&!(Y+Mo+D+H)}}
 function bdPreview(){const s=bdRead(),u=$('#bduntil'),go=$('#bdgo');
@@ -635,7 +706,7 @@ $('#bdf').onsubmit=async e=>{e.preventDefault();if(!BD)return;const s=bdRead();i
  const r=await api({action:'ban',key:ADK,type:BD.type,id:BD.id,msg:w!='photo',photo:w!='msg',y:s.Y,mo:s.Mo,d:s.D,h:s.H});btn.disabled=false;
  if(!r.ok&&!r.demo){toast(BAN_ERR[r.error]||errText(r.error));return}
  $('#bd').close();toast(r.demo?'Blocked (demo: connect the Backend link).':'Device blocked until '+when(r.until)+'.',6000)};
-/* founder: who is blocked right now, and lift a block early */
+/* admin / founder: who is blocked right now, and lift a block early */
 let blT=0;
 async function openBans(){const dlg=$('#bl'),ul=$('#bllist'),sub=$('#blsub');ul.replaceChildren();sub.textContent='Loading…';if(!dlg.open)dlg.showModal();
  const r=await api({action:'listbans',key:ADK});if(!r.ok&&!r.demo){sub.textContent=BAN_ERR[r.error]||errText(r.error);return}
@@ -650,10 +721,10 @@ $('#bl').addEventListener('close',()=>clearInterval(blT));$('#blx').onclick=()=>
 async function del(type,id){const what=type=='photo'?'photo':type=='note'?'post':'message';
  if(!await ask('Delete this '+what+'?','It disappears for everyone'+(type=='message'?'.':', along with its comments and loves.')))return;
  const r=await api({action:'delete',type,id,key:ADK});if(!r.ok){toast('Not deleted. Check the admin key.');return}
- if(type=='photo'){MEM=MEM.filter(m=>m.id!=id);board()}else{MSG=MSG.filter(m=>m.id!=id);msgs(MSG)}
+ if(type=='photo'){const near=VALL.findIndex(x=>x.id==id);MEM=MEM.filter(m=>m.id!=id);board();if(VW.open&&!VW.classList.contains('solo'))vRefresh(near)}else{MSG=MSG.filter(m=>m.id!=id);OLDER=OLDER.filter(m=>m.id!=id);WIN=WIN.filter(m=>m.id!=id);if(TOTAL)TOTAL--;msgs(MSG)}
  toast('Deleted.')}
 /* staff links: yoursite/#admin (graduation team) and yoursite/#founder (the founder). Each asks for its own key; the BACKEND decides who the key belongs to (ROLE).
-   Both can delete photos / messages and pin; only the founder sees the "pause visitor messages" switch. Messages sent from a staff link carry a badge. */
+   Both can delete photos / messages, pin, and block devices; only the founder sees the "pause visitor messages" switch. Messages sent from a staff link carry a badge. */
 async function adminInit(){const want=location.hash=='#founder'?'founder':location.hash=='#admin'?'admin':'';let k='';
  try{k=sessionStorage.getItem('adk')||'';const sr=sessionStorage.getItem('adr')||'';if(want&&sr&&sr!==want)k=''}catch(e){}      // opened the other staff link in the same tab: ask again
  if(want&&!k)k=prompt(want=='founder'?'Founder key':'Admin key')||'';if(!k)return;
@@ -665,20 +736,27 @@ async function adminInit(){const want=location.hash=='#founder'?'founder':locati
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
- const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'',m.badge||'']),rp.mr||{}]));
+ const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'',m.badge||'']),rp.mr||{},rp.total||0]));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
   const lk=!!rp.locked;if(lk!==MLOCK){MLOCK=lk;msgForm()}
-  mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?(rp.messages||[]):MESSAGES;msgs(MSG)}
+  mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?withOlder(rp):MESSAGES;msgs(MSG)}
   const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
   const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device
  const show=rp=>{paint(rp);ready=true;window.DATA_READY=1};
  if(!BACKEND.enabled){show({});return}
  if(cur)show(cur);else boardSkeleton();
- let n=0;(async function refresh(){const rp=await remote(cur&&cur.v);
-  if(rp.failed){                                              // backend not answering: keep what is on screen, show the sample board if there is nothing yet, keep trying quietly
-   if(!ready){show({});toast('The memories are taking a while to load. Retrying…',6000)}
-   if(++n<=4)setTimeout(refresh,5000*n);return}
-  if(rp.same)return;                                          // what is on screen is already the latest
-  cur=rp;saveHome(rp);show(rp)})()})();
+ let n=0,lastOk=Date.now(),busy=0;
+ async function refresh(){if(busy)return;busy=1;
+  try{const rp=await remote(cur&&cur.v);
+   if(rp.failed){                                             // backend not answering: keep what is on screen, show the sample board if there is nothing yet, keep trying quietly
+    if(!ready){show({});toast('The memories are taking a while to load. Retrying…',6000)}
+    if(++n<=4)setTimeout(refresh,5000*n);return}
+   n=0;lastOk=Date.now();
+   if(rp.same)return;                                         // what is on screen is already the latest
+   cur=rp;saveHome(rp);show(rp)}
+  finally{busy=0}}
+ refresh().then(flushPend);                                   // taps that were not confirmed last time are sent again
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ready&&Date.now()-lastOk>60000){n=0;refresh()}});      // coming back to the tab: catch up (a cheap "same?" question when nothing changed)
+ addEventListener('online',()=>{flushPend();n=0;refresh()})})();

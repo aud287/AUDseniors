@@ -1052,7 +1052,7 @@ dialog.gallery .lbmeta span:nth-child(2) {
         padding: 0 4px;
     }
 }
-#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,30px);z-index:120;background:var(--wine);color:#fff;padding:11px 20px;border-radius:99px;opacity:0;pointer-events:none;transition:.4s var(--e);max-width:90vw}
+#toast{position:fixed;top:auto;right:auto;left:50%;bottom:22px;width:max-content;margin:0;border:0;overflow:visible;transform:translate(-50%,30px);z-index:120;background:var(--wine);color:#fff;padding:11px 20px;border-radius:99px;opacity:0;pointer-events:none;transition:.4s var(--e);max-width:90vw}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .del{display:none;position:absolute;top:-10px;right:-6px;z-index:8;width:30px;height:30px;border-radius:50%;place-items:center;background:#c62828;color:#fff;font-size:14px;box-shadow:0 4px 8px #0006}
 .adm .del{display:grid}.msg{position:relative}.msg .del{top:6px;right:6px}.adm .msg .who{margin-right:76px}
@@ -1126,12 +1126,14 @@ img.cap2{width:120px;height:auto;font-size:0}
 .tkin{display:flex;gap:46px;width:max-content;white-space:nowrap;font-weight:700;letter-spacing:.14em;font-size:14px;animation:tk 32s linear infinite}.tkin span{display:inline-flex;align-items:center}
 .tkin img{width:30px;height:30px;margin-right:8px}@keyframes tk{to{transform:translateX(-50%)}}
 .soc i {
-  font-size: 24px;
   width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
 }
+.soc i svg { width: 24px; height: 24px; display: block; }
 
 .soc {
   display: flex;
@@ -1303,7 +1305,7 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .who.vb b{flex:0 1 auto;min-width:0}
 .vbadge{position:relative;flex:none;display:block;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;transition:transform .25s var(--e)}
 .vbadge:before{content:"";position:absolute;inset:-8px}
-.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;}
+.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#fff;box-shadow:0 0 0 1.5px var(--gold),0 2px 6px #6b1a2e40}
 .vbadge img{display:block;width:100%;height:100%;object-fit:cover}
 .vbadge .vt{display:grid;place-items:center;width:100%;height:100%;background:var(--gold);color:var(--ink);font:900 14px/1 'DM Sans',sans-serif}
 .vbadge:hover{transform:scale(1.12)}
@@ -1342,14 +1344,15 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .rpbar-x:hover,.rpbar-x:focus-visible{background:#8f24401f}
 @media(prefers-reduced-motion:reduce){.rpc{animation:none}}
 
-/* ===== blocking devices (founder) + the notice a blocked visitor sees ===== */
+/* ===== blocking devices (admin + founder) + the notice a blocked visitor sees ===== */
 .mbtn.mb{right:78px;background:#3a1f26}
-.founder .mbtn.mb{display:grid}
-.founder .msg .who{margin-right:112px}
-.founder .msg .rpl{width:calc(100% - 112px)}
+.adm .mbtn.mb{display:grid}
+.adm .msg .who{margin-right:112px}
+.adm .msg .rpl{width:calc(100% - 112px)}
 .banb{display:none;position:absolute;top:-10px;right:30px;z-index:8;width:30px;height:30px;border-radius:50%;place-items:center;background:#3a1f26;color:#fff;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 4px 8px #0006}
-.founder .banb{display:grid}
+.adm .banb{display:grid}
 .mlk-b{display:flex;flex-wrap:wrap;gap:8px}
+.mlockbar .btn[hidden]{display:none}
 .bn-s{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border-radius:14px;background:#8f24400f;border-left:3px solid var(--gold);font-size:14px;line-height:1.55;color:var(--ink)}
 .bn-s[dir=rtl]{border-left:0;border-right:3px solid var(--gold);font-family:var(--ar),'DM Sans',sans-serif}
 .bn-s p{margin:0}
@@ -1371,3 +1374,14 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .bl-t{flex:none;font-size:12px;font-weight:700;color:var(--wine)}
 .bl-lift{flex:none;padding:8px 14px;font-size:11px}
 @media(max-width:420px){.bd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bl-r{flex-wrap:wrap}}
+
+/* ===== staff tools inside the full gallery (delete / block device), only while a staff link is active ===== */
+.vw-adm,.vw-tools{display:none}
+.adm .vw-adm{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.vw-adm button{padding:9px 16px;border-radius:99px;background:#c62828;color:#fff;font:700 12px 'DM Sans',sans-serif;letter-spacing:.04em;box-shadow:0 4px 10px #0005}
+.vw-adm .vw-ban{background:#3a1f26;border:1px solid #ffffff44}
+.vw-w{position:relative;min-width:0}
+.adm .vw-tools{display:grid;gap:6px;position:absolute;top:6px;right:6px;z-index:3}
+.vw-tools button{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#c62828;color:#fff;font-size:14px;line-height:1;box-shadow:0 3px 8px #0007}
+.vw-tools .vw-ban{background:#3a1f26;border:1px solid #ffffff55}
+.adm .vw-cat{max-width:calc(100% - 50px)}

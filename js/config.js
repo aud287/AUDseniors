@@ -1,10 +1,10 @@
 /* ===================== CLASS OF 2026 — SETTINGS (edit only this file) =====================
    Every value is plain text. Multi-line values: one item per line, fields separated by |
-   Icons: use a 3D icon name from assets/icons (without .png), e.g. graduation_cap, stethoscope, hot_beverage,
+   Icons: use a 3D icon name from assets/icons (without the extension), e.g. graduation_cap, stethoscope, hot_beverage,
    or type any normal emoji. Full guide: README.md */
 window.SITE = {
   name: "طب الأزهر دمياط",
-  logo: "assets/logo.png",                              // e.g. assets/logo.png  (empty = "YOUR LOGO" placeholder)
+  logo: "assets/logo.webp",                             // e.g. assets/logo.webp  (empty = "YOUR LOGO" placeholder)
   frame: "assets/frame.png",             // square (1:1) PNG with a transparent middle — visitors upload a photo that sits behind it
   frameOpens: "2026-12-10T14:00:00",     // Frame tool stays locked with a "coming soon" overlay until this date/time. Leave "" to unlock it right away.
   date: "2026-12-19T13:00:00",           // graduation date & time
@@ -14,9 +14,9 @@ window.SITE = {
   milestones: ``,                        // countdown sounds, one per line: 50=assets/audio/50days.mp3
   /* staff badges: the small round mark next to the name of messages sent from the #founder link / the #admin link (tap it -> a tiny popup: المؤسس / تيم التخرج).
      Put the image in assets/ (square, any size). Empty = the class logo is used. */
-  founderBadge: "assets/badge-logo.png",                   // messages sent from  yoursite/#founder
-  teamBadge: "assets/badge-logo.png",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
-  backend: "https://script.google.com/macros/s/AKfycbyqvtqfV2WdN_Os0E27FlO-t8ION9XHaGI_ouc1iZiO0uaWB6ULawVYHRUFeG6immTE/exec",                           // Google Apps Script Web app URL (see README.md)
+  founderBadge: "assets/badge-logo.webp",                   // messages sent from  yoursite/#founder
+  teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
+  backend: "https://script.google.com/macros/s/AKfycbw38v9aWNxhTzLd1SqH6s2r0c7JkmwVI6kLHkE-C7_8LAWFXMlBSL4wBp9vNecrkngw/exec",                           // Google Apps Script Web app URL (see README.md)
 
   intro: `SENIORS 2026
 5 years. 10 semesters. One dream.
@@ -34,7 +34,7 @@ party_popper | WE MADE IT`,
   /* ===== المشروع الخيري للدفعة (Charity project) — كل شيء هنا ===== */
   charityTitle: `المشروع الخيري للدفعة`,
   charityText: `شاركنا في المشروع الخيري للدفعة. كل مساهمة، مهما كانت بسيطة، بتفرق.`,
-  charityImage: `assets/charity.png`,                      // ضع صورة التصميم في assets/ واكتب مسارها هنا، مثال: assets/charity.jpg  (فاضي = تظهر "التصميم قريبًا")
+  charityImage: `assets/charity.webp`,                      // ضع صورة التصميم في assets/ واكتب مسارها هنا، مثال: assets/charity.jpg  (فاضي = تظهر "التصميم قريبًا")
   /* وسائل التبرع — سطر لكل وسيلة:   النوع | الاسم الظاهر | الرقم | لينك التبرع (اختياري)
      النوع: vodafone أو instapay.
      • لو كتبت لينك: الضغط على الكارت بيفتح لينك التبرع مباشرة (وفيه زرار صغير لنسخ الرقم).
