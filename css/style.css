@@ -1305,7 +1305,7 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .who.vb b{flex:0 1 auto;min-width:0}
 .vbadge{position:relative;flex:none;display:block;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;transition:transform .25s var(--e)}
 .vbadge:before{content:"";position:absolute;inset:-8px}
-.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#fff;box-shadow:0 0 0 1.5px var(--gold),0 2px 6px #6b1a2e40}
+.vbadge .vi{display:block;width:100%;height:100%;border-radius:50%;overflow:hidden}
 .vbadge img{display:block;width:100%;height:100%;object-fit:cover}
 .vbadge .vt{display:grid;place-items:center;width:100%;height:100%;background:var(--gold);color:var(--ink);font:900 14px/1 'DM Sans',sans-serif}
 .vbadge:hover{transform:scale(1.12)}
