@@ -1385,3 +1385,5 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .vw-tools button{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#c62828;color:#fff;font-size:14px;line-height:1;box-shadow:0 3px 8px #0007}
 .vw-tools .vw-ban{background:#3a1f26;border:1px solid #ffffff55}
 .adm .vw-cat{max-width:calc(100% - 50px)}
+.msg .mt a{color:var(--bur,#7a1f2b);text-decoration:underline;word-break:break-all;cursor:pointer}
+.msg .mt a:hover{opacity:.8}
