@@ -16,7 +16,7 @@ window.SITE = {
      Put the image in assets/ (square, any size). Empty = the class logo is used. */
   founderBadge: "assets/badge-logo.webp",                   // messages sent from  yoursite/#founder
   teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
-  backend: "https://script.google.com/macros/s/AKfycbyGMXW3kkih8LtEWFD-amzBHRB4rUKF2pBKi9JW7UtsWGYqw9PRO_-4FRyuvYVsRIx1/exec",                           // Google Apps Script Web app URL (see README.md)
+  backend: "https://script.google.com/macros/s/AKfycbwZ0_5ENJ1Iu-pSELX0C_mqpZwtaJBekSjeR-RRHGfIXd9mTwaEjC2nqLDwN-6Htvug/exec",                           // Google Apps Script Web app URL (see README.md)
 
   intro: `SENIORS 2026
 5 years. 10 semesters. One dream.
@@ -56,10 +56,10 @@ facebook=https://www.facebook.com/profile.php?id=61583995127897
 X=https://x.com/AudMed2026
 telegram=`,
 
-  events: `coat | Senior Jacket Day | 2026-10-29 10:00 | Arcadia space | Pick up your jacket and take the group photo.
+  events: `coat | Senior Jacket Day | 2026-11-07 12:00 | Arcadia space | Pick up your jacket and take the group photo.
 party_popper | Graduation Ceremony | 2026-12-19 13:00 | College | The chapter is complete. Arrive by 12:00.`,
 
-  announce: `Senior Jacket Day is coming! | SOON | | 2026-09-01 | 2026-10-29`,
+  announce: `Senior Jacket Day is coming! | SOON | | 2026-09-01 | 2026-11-07`,
 
   polls: `خد من الكلية ايه؟ | مدمن كافيين | اقرعيت من الصلع الوراثي | بتسف بنادول | ارق ومعرفش انام  
 كام مره طبقت ف الامتحانات؟ | ولا مرة | مرتين او تلاتة | كتير | يعني ايه نوم  
@@ -81,3 +81,4 @@ bone_joint | Orthopedics | 2026-12-19`,
   photos: ``
   /* example:  assets/photos/01.jpg | Day one | FIRST DAY | 2021-10-10 */
 };
+
