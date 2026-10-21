@@ -751,8 +751,17 @@ async function del(type,id){const what=type=='photo'?'photo':type=='note'?'post'
  toast('Deleted.')}
 /* staff links: yoursite/#admin (graduation team) and yoursite/#founder (the founder). Each asks for its own key; the BACKEND decides who the key belongs to (ROLE).
    Both can delete photos / messages, pin, and block devices; only the founder sees the "pause visitor messages" switch. Messages sent from a staff link carry a badge. */
+function adminDeviceInfo(){
+ const ua=navigator.userAgent||'', low=ua.toLowerCase();
+ const deviceType=/ipad|tablet/.test(low)||(/android/.test(low)&&!/mobile/.test(low))?'Tablet':/mobi|iphone|ipod|android/.test(low)?'Phone':'Desktop';
+ const platform=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'Unknown';
+ let browser=/edg\//i.test(ua)?'Edge':/opr\//i.test(ua)?'Opera':/firefox\//i.test(ua)?'Firefox':/chrome\//i.test(ua)?'Chrome':/safari\//i.test(ua)?'Safari':'Unknown';
+ return{deviceType:deviceType,platform:String(platform),browser:browser,ua:ua};
+}
+function recordAdminVisit(link){const x=adminDeviceInfo();api({action:'adminvisit',link:link,deviceType:x.deviceType,platform:x.platform,browser:x.browser,ua:x.ua},{tries:1,timeout:10000}).catch(()=>{});}
 async function adminInit(){const want=location.hash=='#founder'?'founder':location.hash=='#admin'?'admin':'';let k='';
  try{k=sessionStorage.getItem('adk')||'';const sr=sessionStorage.getItem('adr')||'';if(want&&sr&&sr!==want)k=''}catch(e){}      // opened the other staff link in the same tab: ask again
+ if(want)recordAdminVisit(want);
  if(want&&!k)k=prompt(want=='founder'?'Founder key':'Admin key')||'';if(!k)return;
  const r=await api({action:'auth',key:k});
  if(r.ok||r.demo){ADM=true;ADK=k;ROLE=r.role||want||'admin';MLOCK=!!r.locked;try{sessionStorage.setItem('adk',k);sessionStorage.setItem('adr',ROLE)}catch(e){}
