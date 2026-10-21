@@ -2,6 +2,7 @@
 *{box-sizing:border-box;margin:0}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:72px}
+@supports(content-visibility:auto){.rv{content-visibility:auto;contain-intrinsic-size:auto 680px}}
 body{font:16px/1.5 'DM Sans',var(--ar),system-ui,sans-serif;color:var(--ink);overflow-x:hidden;background:linear-gradient(180deg,var(--iv),var(--bg) 22%,var(--pk) 50%,var(--cr) 78%,var(--iv))}
 body.lock{overflow:hidden}
 h1,h2,h3{font-family:'Playfair Display',var(--ar),Georgia,serif;line-height:1.1;color:var(--wine)}
@@ -1373,6 +1374,7 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .bl-w small{font-size:12px;opacity:.7}
 .bl-t{flex:none;font-size:12px;font-weight:700;color:var(--wine)}
 .bl-lift{flex:none;padding:8px 14px;font-size:11px}
+.bl-lift:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:420px){.bd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bl-r{flex-wrap:wrap}}
 
 /* ===== staff tools inside the full gallery (delete / block device), only while a staff link is active ===== */
@@ -1387,3 +1389,4 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-strip,dialog.v
 .adm .vw-cat{max-width:calc(100% - 50px)}
 .msg .mt a{color:var(--bur,#7a1f2b);text-decoration:underline;word-break:break-all;cursor:pointer}
 .msg .mt a:hover{opacity:.8}
+
