@@ -406,6 +406,13 @@ const ACT = {
     patch(x => { const k = poll + '_' + option; x.votes[k] = (x.votes[k] || 0) + 1; });
     return out({ ok: 1 });
   },
+  adminvisit(d, now) {                                  // anonymous audit entry: one request is sent whenever #admin / #founder opens. No browser permission is requested.
+    const link = d.link === 'founder' ? 'founder' : d.link === 'admin' ? 'admin' : '';
+    if (!link) return out({ ok: 0, error: 'link' });
+    const ua = clean(d.ua, 500), type = clean(d.deviceType, 24), platform = clean(d.platform, 80), browser = clean(d.browser, 80);
+    put('AdminVisits', { date: now, deviceId: devId(d.dev), link: link, deviceType: type, platform: platform, browser: browser, userAgent: ua });
+    return out({ ok: 1 });
+  },
   auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0 } : { ok: 0, error: s }); },
   bancheck(d) {                                            // anyone: "is THIS device blocked right now?" (the page asks before it uploads a heavy photo)
     const dv = devId(d.dev), m = banOf(dv, 'msg'), p = banOf(dv, 'photo');
