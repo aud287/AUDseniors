@@ -26,6 +26,7 @@ const REACT_WAIT = 20000;                 // ms a reaction may wait for its turn
 const FOLD_GAP = 2500;                    // ms: minimum pause between two folds (a fold handles every tap waiting in the inbox, so a burst costs one pass, not one per tap)
 const CHUNK = 30000;                      // cache chunk size in characters (a cache value is limited to 100 KB)
 const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
+const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev'],           // dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
@@ -207,9 +208,9 @@ function tallies(state, valid) {                        // state rows [msg, dev,
 }
 function writeCounts(cnt) {                             // MsgCounts = the totals, rewritten in one go (it only has one row per message that has reactions)
   const t = tab('MsgCounts'), lr = t.getLastRow();
-  if (lr > 1) t.getRange(2, 1, lr - 1, 6).clearContent();
+  if (lr > 1) t.getRange(2, 1, lr - 1, MSG_COUNT_COLS).clearContent();
   const list = Object.keys(cnt).map(m => [m].concat(MSG_EMO.map(e => String(cnt[m][e] || 0))));
-  if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); txt(t.getRange(2, 1, list.length, 6)).setValues(list); }
+  if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); txt(t.getRange(2, 1, list.length, MSG_COUNT_COLS)).setValues(list); }
 }
 function recount() {                                    // rebuild MsgCounts from the state rows (safe to run any time from the editor: it repairs any drift)
   const t = tab('MsgState'), lr = t.getLastRow(), valid = {};
@@ -219,7 +220,7 @@ function recount() {                                    // rebuild MsgCounts fro
 }
 function readCounts() {                                 // MsgCounts -> {msg: {emoji: n}} (only non-zero)
   const t = tab('MsgCounts'), lr = t.getLastRow(), cnt = {}; if (lr < 2) return cnt;
-  t.getRange(2, 1, lr - 1, 6).getValues().forEach(r => { const o = {}; MSG_EMO.forEach((e, i) => { const n = Number(r[i + 1]) || 0; if (n > 0) o[e] = n; }); if (Object.keys(o).length) cnt[String(r[0])] = o; });
+  t.getRange(2, 1, lr - 1, MSG_COUNT_COLS).getValues().forEach(r => { const o = {}; MSG_EMO.forEach((e, i) => { const n = Number(r[i + 1]) || 0; if (n > 0) o[e] = n; }); if (Object.keys(o).length) cnt[String(r[0])] = o; });
   return cnt;
 }
 function mrStr(cnt, win) {                              // the small public blob: counts of the messages the page shows
