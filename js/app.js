@@ -321,7 +321,7 @@ const tmFmt=t=>t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hou
 const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';if(s<604800)return Math.floor(s/86400)+' d ago';return''};
 /* ---- reactions (Telegram style): tap a note -> a small picker; chips with counts sit under the text on the left; nothing shows until someone reacts ----
    one reaction per device per message (tap another to change it, tap yours again to remove it) · counts live on the backend, "mine" is remembered on this device */
-const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['party','🎉','Celebrate'],['grad','🎓','Graduation']];
+const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['wow','🤯','wow'],['party','🥳','Celebrate'],['grad','🎓','Graduation']];
 const DEV=(()=>{let d='';try{d=localStorage.getItem('aud_dev')||''}catch(e){}
  if(!d){const m=document.cookie.match(/(?:^|; )aud_dev=([a-z0-9]{6,32})/);if(m)d=m[1]}                                 // this browser's anonymous id is kept in two places: clearing only one of them does not make it a "new device"
  if(!d){try{d=Array.from(crypto.getRandomValues(new Uint8Array(10)),x=>(x%36).toString(36)).join('')}catch(e){d='x'+Math.random().toString(36).slice(2,12)}}
