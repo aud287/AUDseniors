@@ -1,4 +1,4 @@
-/* CLASS OF 2026 — backend (Google Apps Script) · v4  "no limits"
+/* CLASS OF 2026 — backend (Google Apps Script) · v5  "durable reactions"
    Setup: README.md.  Paste this file, keep your own ADMIN_KEY / FOUNDER_KEY, then Deploy > Manage deployments > Edit > New version.
    (Running setup() once is optional: missing tabs are created automatically and old reaction data is converted by itself the first time it is needed.)
 
@@ -6,9 +6,10 @@
    • every single reaction read the WHOLE reactions sheet, rewrote a copy of ALL public data into the script cache (a new set of cache entries each time)
      and held the one global lock while doing it. CacheService keeps at most 1000 entries, so the cache thrashed constantly, and the work per tap grew with
      the amount of data until taps queued up behind the lock, timed out and were silently dropped (the page shows the tap first and reverts it later).
-   • v4: a tap is one tiny row in an INBOX tab (constant work, whatever the history). The inbox is folded into per-device state + per-message counts in
+   • v5: a tap is one tiny row in an INBOX tab (constant work, whatever the history). The inbox is folded into per-device state + per-message counts in
      BATCHES (one pass for any number of taps). Counts live in their own small sheet and in a small fixed cache entry, so nothing grows with the number of
-     reactions and there is no cap on how many people can react. The cache never holds more than ~20 entries (fixed names, overwritten in place). */
+     reactions in the cache. v5 also runs a one-time recovery import from the old reaction tabs, so a previously completed migration cannot hide preserved
+     legacy reactions when MsgState was emptied or a prior import was incomplete. */
 const ADMIN_KEY = 'aud287**';           // the graduation team's secret (yoursite/#admin).   Better: put it in Project Settings > Script properties as ADMIN_KEY and leave this file without secrets
 const FOUNDER_KEY = 'Bntawakl2030**';   // the FOUNDER's secret (yoursite/#founder). Must differ from ADMIN_KEY. Same: Script property FOUNDER_KEY overrides this value
 const SHEET_ID = '1tJ_KcZX9P7Od9zWN0_APuiSqGRlP2mwnhnw7LMR_mCo';
@@ -29,8 +30,8 @@ const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev'],           // dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
   Votes: ['poll', 'option', 'date'],
-  Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970
-  Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr4 = '1' once old reaction data was converted
+  Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
+  Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
   MsgState: ['msg', 'dev', 'emoji', 'date'],                // STATE: one row per (message, device) = that device's current reaction (emoji '' = removed). Rows are reused, never duplicated. (The tab 'MsgReactions' of earlier versions is only READ, once, to import old reactions: it is never written, so a Google Sheets Table / dropdown rules on it can not break anything)
   MsgCounts: ['msg', 'love', 'haha', 'sad', 'party', 'grad'], // reaction totals per message (derived from MsgState on every fold)
   MsgInbox: ['line']                                        // taps waiting to be folded:  emoji|messageId|deviceId|time   (emoji = none when a reaction is removed). Emptied by every fold
@@ -94,7 +95,7 @@ function folder() { const f = DriveApp.getFoldersByName(FOLDER); return f.hasNex
 function clean(x, n) { return String(x || '').replace(/[<>]/g, '').trim().slice(0, n); }
 function limited(key, secs) { if (!key) return false; const c = cache(), k = 'rl_' + key; if (c.get(k)) return true; c.put(k, '1', secs); return false; }
 function trashFile(id) { if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (x) {} } }
-function setup() { Object.keys(HEAD).forEach(tab); folder(); const lock = LockService.getScriptLock(); lock.waitLock(30000); try { migrateOnce(); bump(); } finally { lock.releaseLock(); } Logger.log('OK: sheets + Drive folder are ready, reactions are in the v4 format.'); }
+function setup() { Object.keys(HEAD).forEach(tab); folder(); const lock = LockService.getScriptLock(); lock.waitLock(30000); try { migrateOnce(); bump(); } finally { lock.releaseLock(); } Logger.log('OK: sheets + Drive folder are ready, reactions are in the v5 format.'); }
 
 /* ---------- identity: the admin / founder keys ---------- */
 const DEF_ADMIN = 'CHANGE_THIS_SECRET', DEF_FOUNDER = 'CHANGE_THIS_FOUNDER_SECRET';
@@ -181,11 +182,14 @@ function importLegacy() {                               // old reactions -> MsgS
   if (add.length) { const to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); txt(st.getRange(slr + 1, 1, add.length, 4)).setValues(add); }
   return add.length;
 }
-function migrateOnce() {                                // once: bring the reactions of earlier versions into MsgState (nothing old is changed or deleted)
-  const c = cache(); if (c.get('mr5ok')) return;
-  const f = find('Settings', 'key', 'mr5'); if (f && String(f.o.value) === '1') { c.put('mr5ok', '1', 21600); return; }
+function migrateOnce() {                                // once per backend generation: bring old reactions back without ever replacing newer state
+  const c = cache(); if (c.get('mr6ok')) return;
+  const f = find('Settings', 'key', 'mr6'); if (f && String(f.o.value) === '1') { c.put('mr6ok', '1', 21600); return; }
+  /* Do not trust the old mr5 flag here. Earlier deployments could set it while MsgState was empty, leaving perfectly valid rows in MsgReactions invisible
+     after a refresh. importLegacy is additive: an existing (message, device) state row always wins, so it is safe for live installations. */
   importLegacy(); recount();
-  put('Settings', { key: 'mr5', value: '1' }); c.put('mr5ok', '1', 21600);
+  if (f) setRow('Settings', f.row, { value: '1' }); else put('Settings', { key: 'mr6', value: '1' });
+  c.put('mr6ok', '1', 21600);
 }
 function msgOrder() {                                   // ids of every message in sheet order + the pinned one ('' if none)
   const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return { ids: [], pin: '' };
@@ -269,7 +273,11 @@ function msgReact(d) {                                  // a tap on a wall messa
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
   finally { lock.releaseLock(); }
 }
-function inboxAdd(line) { tab('MsgInbox').appendRow([line]); }
+function inboxAdd(line) {                               // append without appendRow's implicit formatting work; the caller already owns the lock
+  const t = tab('MsgInbox'), row = t.getLastRow() + 1;
+  if (row > t.getMaxRows()) t.insertRowsAfter(t.getMaxRows(), Math.max(500, row - t.getMaxRows()));
+  txt(t.getRange(row, 1)).setValue(line);
+}
 function maybeFold() {                                  // a reader helps: if taps are waiting and nobody folded lately, fold them now (never waits for a busy lock)
   const c = cache(); if (c.get('chk')) return; c.put('chk', '1', 2);
   if (!foldDue() || tab('MsgInbox').getLastRow() < 2) return;
@@ -416,20 +424,23 @@ const ACT = {
     if (!f) return out({ ok: 0, error: 'gone' });
     const dev = devId(f.o.dev); if (!dev) return out({ ok: 0, error: 'nodev' });      // posted before devices were recorded (or by staff)
     const now = Date.now(), until = Math.min(addSpan(now, Y, Mo, D, H), Date.UTC(9999, 11, 31));
-    const row = { dev: dev, msg: msg ? '1' : '', photo: photo ? '1' : '', from: now, until: until, label: label }, b = find('Bans', 'dev', dev);
+    const by = role(d.key) === 'founder' ? 'founder' : 'admin', b = find('Bans', 'dev', dev);
+    if (b && by !== 'founder' && String(b.o.by) === 'founder' && Number(b.o.until) > now && (String(b.o.msg) === '1' || String(b.o.photo) === '1')) return out({ ok: 0, error: 'founderlock' });   // the admin can not replace (shorten / change) a block the founder set
+    const row = { dev: dev, msg: msg ? '1' : '', photo: photo ? '1' : '', from: now, until: until, label: label, by: by };
     if (b) setRow('Bans', b.row, row); else put('Bans', row);                          // blocking the same device again replaces its earlier block
     return out({ ok: 1, from: now, until: until, now: now, label: label });
   },
   unban(d) {                                               // admin or founder: lift a block before it ends
     const st = adminState(d.key); if (st !== 'ok') return out({ ok: 0, error: st });   // admin OR founder
     const b = find('Bans', 'dev', devId(d.dev));
+    if (b && role(d.key) !== 'founder' && String(b.o.by) === 'founder' && Number(b.o.until) > Date.now()) return out({ ok: 0, error: 'founderlock' });   // a block set by the founder can only be lifted by the founder
     if (b) setRow('Bans', b.row, { msg: '', photo: '', until: '0' });
     return out({ ok: 1 });
   },
   listbans(d) {                                            // admin or founder: the blocks that are still running
     const st = adminState(d.key); if (st !== 'ok') return out({ ok: 0, error: st });   // admin OR founder
-    const now = Date.now(), list = rows('Bans').filter(r => Number(r.until) > now && (String(r.msg) === '1' || String(r.photo) === '1'))
-      .map(r => ({ dev: String(r.dev), msg: String(r.msg) === '1', photo: String(r.photo) === '1', from: Number(r.from) || 0, until: Number(r.until), label: String(r.label || '') }))
+    const now = Date.now(), me = role(d.key), list = rows('Bans').filter(r => Number(r.until) > now && (String(r.msg) === '1' || String(r.photo) === '1'))
+      .map(r => ({ dev: String(r.dev), msg: String(r.msg) === '1', photo: String(r.photo) === '1', from: Number(r.from) || 0, until: Number(r.until), label: String(r.label || ''), locked: me !== 'founder' && String(r.by) === 'founder' ? 1 : 0 }))   // locked = set by the founder, so this staff member can not lift it
       .sort((a, b) => a.until - b.until);
     return out({ ok: 1, now: now, bans: list });
   },
@@ -470,7 +481,7 @@ function diagnose() {                                   // read-only: shows what
   const sh = n => book().getSheetByName(n), rowsOf = t => t ? Math.max(0, t.getLastRow() - 1) : 'MISSING';
   const mrT = sh('MsgState'), cT = sh('MsgCounts'), iT = sh('MsgInbox'), sT = sh('Settings');
   say('Tabs: MsgState=' + rowsOf(mrT) + ' rows, MsgCounts=' + rowsOf(cT) + ' rows, MsgInbox=' + rowsOf(iT) + ' waiting. Old tabs (read only): MsgReactions=' + (sh('MsgReactions') ? rowsOf(sh('MsgReactions')) : 'none') + ', MsgReactionsOld=' + (sh('MsgReactionsOld') ? rowsOf(sh('MsgReactionsOld')) : 'none'));
-  const f = sT ? find('Settings', 'key', 'mr5') : null; say('Old reactions imported (Settings mr5): ' + (f ? f.o.value : 'NOT YET'));
+  const f = sT ? find('Settings', 'key', 'mr6') : null; say('Old reaction recovery imported (Settings mr6): ' + (f ? f.o.value : 'NOT YET'));
   const warn = []; ['MsgState', 'MsgCounts', 'MsgInbox'].forEach(n => { const t = sh(n); if (!t) return; try { const dv = t.getRange(2, 1, Math.max(1, Math.min(t.getMaxRows() - 1, 200)), Math.max(1, t.getLastColumn())).getDataValidations(); if (dv.some(r => r.some(x => x))) warn.push(n); } catch (e) {} });
   if (warn.length) say('WARNING: these tabs have dropdown / validation rules: ' + warn.join(', ') + '. Select the tab, Data > Data validation > Remove all. (A Google Sheets "Table" on them can also block writes: right-click it > Convert to range.)');
   let st = [];
@@ -502,5 +513,6 @@ function compactState() {                              // MsgState back to ONE r
 }
 function repair() {                                     // rebuilds the totals from the reactions in the sheet and applies anything waiting. Safe to run any time.
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
-  try { cache().remove('mr5ok'); migrateOnce(); const imp = importLegacy(), n = compactState(); fold(); recount(); bump(); Logger.log('Repaired: ' + imp + ' old reactions imported, ' + n + ' reactions kept. Run diagnose() to check.'); } finally { lock.releaseLock(); }
+  try { cache().remove('mr6ok'); migrateOnce(); const imp = importLegacy(), n = compactState(); fold(); recount(); bump(); Logger.log('Repaired: ' + imp + ' old reactions imported, ' + n + ' reactions kept. Run diagnose() to check.'); } finally { lock.releaseLock(); }
 }
+
