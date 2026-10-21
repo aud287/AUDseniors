@@ -321,7 +321,7 @@ const tmFmt=t=>t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hou
 const agoTxt=t=>{const s=(Date.now()-t)/1000;if(s<-60)return'';if(s<60)return'Just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';if(s<604800)return Math.floor(s/86400)+' d ago';return''};
 /* ---- reactions (Telegram style): tap a note -> a small picker; chips with counts sit under the text on the left; nothing shows until someone reacts ----
    one reaction per device per message (tap another to change it, tap yours again to remove it) · counts live on the backend, "mine" is remembered on this device */
-const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['wow','🫨','wow'],['party','🥳','Celebrate'],['grad','🎓','Graduation']];
+const RXS=[['love','❤️','Love'],['haha','😂','Funny'],['sad','😢','Sad'],['party','🎉','Celebrate'],['grad','🎓','Graduation']];
 const DEV=(()=>{let d='';try{d=localStorage.getItem('aud_dev')||''}catch(e){}
  if(!d){const m=document.cookie.match(/(?:^|; )aud_dev=([a-z0-9]{6,32})/);if(m)d=m[1]}                                 // this browser's anonymous id is kept in two places: clearing only one of them does not make it a "new device"
  if(!d){try{d=Array.from(crypto.getRandomValues(new Uint8Array(10)),x=>(x%36).toString(36)).join('')}catch(e){d='x'+Math.random().toString(36).slice(2,12)}}
@@ -402,13 +402,14 @@ async function syncRx(id){if(RXB[id]){RXD[id]=1;return}RXB[id]=1;
   await sleep(Math.min(30000,1500*n*n))}}
  finally{RXB[id]=0}}
 function flushPend(){Object.keys(PEND).forEach(id=>{if(!RXB[id])syncRx(id)})}
+const sameRx=(a,b)=>{a=a||{};b=b||{};return RXS.every(x=>(a[x[0]]||0)===(b[x[0]]||0))};
 const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now(),hot=id=>(id in PEND)||now-(RXT[id]||0)<3e4;
  /* server totals win, except for a message I tapped in the last 30 s (or whose tap is not confirmed yet): the server may not have folded my tap into its totals, so show it anyway */
  const inWin=new Set(rp.messages.map(m=>String(m.id)));      // notes loaded from older pages keep their own totals
- new Set([...Object.keys(s),...[...Object.keys(RX),...Object.keys(MINE)].filter(id=>inWin.has(id))]).forEach(id=>{const k=Object.assign({},s[id]||{});
+  new Set([...Object.keys(s),...[...Object.keys(RX),...Object.keys(MINE)].filter(id=>inWin.has(id))]).forEach(id=>{const before=RX[id],k=Object.assign({},s[id]||{});
   if(inWin.has(id)&&MINE[id]&&!hot(id)&&!(k[MINE[id]]>0)&&!RECHK[id]){RECHK[id]=1;setTimeout(()=>{if(MINE[id]&&!RXB[id])syncRx(id)},1500)}      // the server does not list MY reaction (lost on its side?): send it again, once per visit. Harmless if it was only a stale copy: the server keeps one reaction per device
   if(hot(id)){const m=MINE[id]||'',p=PEND[id]||'';if(p&&p!==m&&k[p]>0)k[p]--;if(m&&!(k[m]>0))k[m]=1}
-  Object.keys(k).forEach(e=>{if(!(k[e]>0))delete k[e]});if(Object.keys(k).length)RX[id]=k;else delete RX[id]})};
+   Object.keys(k).forEach(e=>{if(!(k[e]>0))delete k[e]});if(Object.keys(k).length)RX[id]=k;else delete RX[id];if(!sameRx(before,RX[id]))rxDraw(id)})};
 addEventListener('click',e=>{if(!e.target.closest('#wall .msg,#pinwrap .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
 /* admin: pin a message (a pinned note stays first and stays on screen while the wall scrolls). Admins can pin / unpin / delete, but never edit what someone wrote. */
 async function pinMsg(m,pin){const r=await api({action:'pinmsg',id:m.id,key:ADK,pin:pin});
@@ -497,7 +498,8 @@ function wallMore(){const w=$('#wall');if(!w||!SORTED.length)return;
  if(w.scrollHeight-w.scrollTop-w.clientHeight>1800)return;
  if(SHOWN<SORTED.length){addCards(Math.min(SORTED.length,SHOWN+SHOW_STEP));SHOW_N=Math.max(SHOW_N,SHOWN);requestAnimationFrame(wallMore);return}
  if(MORE&&!MLOAD&&!MFAIL)loadOlder()}
-$('#wall').addEventListener('scroll',wallMore,{passive:true});
+let wallTick=0;const queueWallMore=()=>{if(!wallTick)wallTick=requestAnimationFrame(()=>{wallTick=0;wallMore()})};
+$('#wall').addEventListener('scroll',queueWallMore,{passive:true});
 function mMore(){const b=$('#mmore');if(!b)return;b.hidden=!(MORE&&(MLOAD||MFAIL));b.disabled=!!MLOAD;b.textContent=MLOAD?'LOADING OLDER NOTES…':'COULD NOT LOAD · TAP TO RETRY'}      // normally invisible: older notes load by themselves; it only shows progress / a retry after an error
 function withOlder(rp){const w=rp.messages||[],ids=new Set(w.map(m=>String(m.id)));
  const lo=w.reduce((a,m)=>{const d=String(m.date||'');return d&&(!a||d<a)?d:a},'');
@@ -714,7 +716,7 @@ function showBan(i){const dlg=$('#bn'),skew=(i.now||Date.now())-Date.now(),w=BN_
  clearInterval(bnT);tick();bnT=setInterval(tick,1000);if(!dlg.open)dlg.showModal()}
 $('#bn').addEventListener('close',()=>clearInterval(bnT));
 /* admin / founder: the "Block this device" window */
-const BAN_ERR={nodev:"This one was posted before devices were tracked (or by staff), so it can't be blocked.",gone:'That message / photo was already deleted, so its device is unknown.',span:'Enter a duration of at least 1 hour (whole numbers).',what:'Choose what to block.',founder:'Only the admin or founder link can block devices.',key:'The key was not accepted. Reopen the admin / founder link.'};
+const BAN_ERR={nodev:"This one was posted before devices were tracked (or by staff), so it can't be blocked.",gone:'That message / photo was already deleted, so its device is unknown.',span:'Enter a duration of at least 1 hour (whole numbers).',what:'Choose what to block.',founder:'Only the admin or founder link can block devices.',key:'The key was not accepted. Reopen the admin / founder link.',founderlock:'This block can not be lifted or changed.'};
 let BD=null;
 function bdRead(){const n=id=>{const v=$(id).value.trim();return v===''?0:Number(v)},Y=n('#bdy'),Mo=n('#bdmo'),D=n('#bdd'),H=n('#bdh'),ok=[Y,Mo,D,H].every(x=>Number.isInteger(x)&&x>=0&&x<=9999);return{Y,Mo,D,H,ok,zero:ok&&!(Y+Mo+D+H)}}
 function bdPreview(){const s=bdRead(),u=$('#bduntil'),go=$('#bdgo');
@@ -736,8 +738,9 @@ async function openBans(){const dlg=$('#bl'),ul=$('#bllist'),sub=$('#blsub');ul.
  const skew=(r.now||Date.now())-Date.now(),count=()=>{const n=ul.children.length;sub.textContent=n?n+(n==1?' device is':' devices are')+' blocked right now.':'No active blocks.'};
  (r.bans||[]).forEach(b=>{const li=el('li','bl-r'),w=el('div','bl-w'),t=el('span','bl-t'),k=el('button','btn g bl-lift','LIFT');k.type='button';
   w.append(el('b','',b.label||'Unknown'),el('small','',b.msg&&b.photo?'Messages + photos':b.msg?'Messages':'Photos'));
+  if(b.locked)k.disabled=true;                                                   // same button, just not clickable
   li._tick=()=>{t.textContent=fmtSpan(spanOf(Date.now()+skew,b.until),'en',false)+' left'};li._tick();
-  k.onclick=async()=>{k.disabled=true;const x=await api({action:'unban',key:ADK,dev:b.dev});if(!x.ok&&!x.demo){k.disabled=false;return toast(BAN_ERR[x.error]||errText(x.error))}li.remove();count();toast('Block lifted.')};
+  k.onclick=async()=>{if(k.disabled)return;k.disabled=true;const x=await api({action:'unban',key:ADK,dev:b.dev});if(!x.ok&&!x.demo){k.disabled=false;return toast(BAN_ERR[x.error]||errText(x.error))}li.remove();count();toast('Block lifted.')};
   li.append(w,t,k);ul.append(li)});count();
  clearInterval(blT);blT=setInterval(()=>ul.querySelectorAll('li').forEach(li=>li._tick&&li._tick()),1000)}
 $('#bl').addEventListener('close',()=>clearInterval(blT));$('#blx').onclick=()=>$('#bl').close();$('#banman').onclick=openBans;
@@ -759,7 +762,7 @@ async function adminInit(){const want=location.hash=='#founder'?'founder':locati
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
- const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.pin||'',m.badge||'']),rp.mr||{},rp.total||0]));
+ const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.name,m.message,m.date,m.pin||'',m.badge||'',m.reply||'',m.rname||'',m.rtext||'',m.bn||0]),rp.total||0]));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
@@ -783,3 +786,4 @@ function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.crea
  refresh().then(flushPend);                                   // taps that were not confirmed last time are sent again
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ready&&Date.now()-lastOk>60000){n=0;refresh()}});      // coming back to the tab: catch up (a cheap "same?" question when nothing changed)
  addEventListener('online',()=>{flushPend();n=0;refresh()})})();
+
