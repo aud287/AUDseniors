@@ -25,7 +25,7 @@ const LOCK_WAIT = 25000;                  // ms an ordinary write may wait for i
 const REACT_WAIT = 20000;                 // ms a reaction may wait for its turn (its work inside the lock is a single row)
 const FOLD_GAP = 2500;                    // ms: minimum pause between two folds (a fold handles every tap waiting in the inbox, so a burst costs one pass, not one per tap)
 const CHUNK = 30000;                      // cache chunk size in characters (a cache value is limited to 100 KB)
-const MSG_EMO = ['love', 'haha', 'sad', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
+const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
 const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev'],           // dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
@@ -33,7 +33,7 @@ const HEAD = {
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
   MsgState: ['msg', 'dev', 'emoji', 'date'],                // STATE: one row per (message, device) = that device's current reaction (emoji '' = removed). Rows are reused, never duplicated. (The tab 'MsgReactions' of earlier versions is only READ, once, to import old reactions: it is never written, so a Google Sheets Table / dropdown rules on it can not break anything)
-  MsgCounts: ['msg', 'love', 'haha', 'sad', 'party', 'grad'], // reaction totals per message (derived from MsgState on every fold)
+  MsgCounts: ['msg', 'love', 'haha', 'sad', 'wow', 'party', 'grad'], // reaction totals per message (derived from MsgState on every fold)
   MsgInbox: ['line']                                        // taps waiting to be folded:  emoji|messageId|deviceId|time   (emoji = none when a reaction is removed). Emptied by every fold
 };
 /* The old posts page (Users, Reactions, Comments, Notes, PollVotes tabs) was removed from the site. Those tabs are left exactly as they are in your sheet;
@@ -515,4 +515,3 @@ function repair() {                                     // rebuilds the totals f
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try { cache().remove('mr6ok'); migrateOnce(); const imp = importLegacy(), n = compactState(); fold(); recount(); bump(); Logger.log('Repaired: ' + imp + ' old reactions imported, ' + n + ' reactions kept. Run diagnose() to check.'); } finally { lock.releaseLock(); }
 }
-
