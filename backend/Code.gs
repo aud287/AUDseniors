@@ -34,7 +34,8 @@ const HEAD = {
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
   MsgState: ['msg', 'dev', 'emoji', 'date'],                // STATE: one row per (message, device) = that device's current reaction (emoji '' = removed). Rows are reused, never duplicated. (The tab 'MsgReactions' of earlier versions is only READ, once, to import old reactions: it is never written, so a Google Sheets Table / dropdown rules on it can not break anything)
   MsgCounts: ['msg', 'love', 'haha', 'sad', 'wow', 'party', 'grad'], // reaction totals per message (derived from MsgState on every fold)
-  MsgInbox: ['line']                                        // taps waiting to be folded:  emoji|messageId|deviceId|time   (emoji = none when a reaction is removed). Emptied by every fold
+  MsgInbox: ['line'],                                      // taps waiting to be folded: emoji|messageId|deviceId|time
+  AdminVisits: ['date', 'deviceId', 'link', 'deviceType', 'platform', 'browser', 'userAgent'] // one row per opening of #admin or #founder
 };
 /* The old posts page (Users, Reactions, Comments, Notes, PollVotes tabs) was removed from the site. Those tabs are left exactly as they are in your sheet;
    this file simply no longer reads them, which is a big part of why the site is faster now. */
