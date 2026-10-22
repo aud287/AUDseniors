@@ -453,8 +453,8 @@ const ACT = {
       .sort((a, b) => a.until - b.until);
     return out({ ok: 1, now: now, bans: list });
   },
-  msglock(d) {                                             // FOUNDER only: pause / resume messages from visitors (the admin and the founder can still post)
-    if (role(d.key) !== 'founder') return out({ ok: 0, error: adminState(d.key) === 'ok' ? 'founder' : adminState(d.key) });
+  msglock(d) {                                             // admin or founder: pause / resume messages from visitors (staff can still post)
+    const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
     const on = d.on === true || d.on === 1 || d.on === '1';
     setLock(on);
     return out({ ok: 1, locked: on ? 1 : 0 });             // not a patch, so the cached public data is rebuilt on the next read
