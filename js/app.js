@@ -437,8 +437,8 @@ function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('
  if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
  else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
  note.hidden=!note.childNodes.length;
- if(bar){bar.hidden=!ADM;$('#mlock').hidden=ROLE!=='founder';$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
-$('#mlock').onclick=async()=>{if(ROLE!=='founder')return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
+ if(bar){bar.hidden=!ADM;$('#mlock').hidden=!ADM;$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
+$('#mlock').onclick=async()=>{if(!ADM)return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
  const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
  MLOCK=r.demo?want:!!r.locked;msgForm();toast(MLOCK?'Visitor messages are paused.':'Visitor messages are open again.')};
