@@ -149,7 +149,7 @@ let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(strings,200
    Reel DOM is built lazily: one empty box per post, and only the posts near the current one hold images (the rest are emptied again), so a thousand photos stay light. */
 let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false,RLB=false;            // list shown · current index · mode · filter · sort · grid built? · reel built?
 const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=2000;
-/* cinematic dark lighting on the photo viewer: ON by default. Turn it off with  cinematic: "off"  in js/config.js (CSS is under "CINEMATIC" in style.css) */
+/* cinematic ambient light around the photo (like YouTube's cinematic mode): ON by default. Turn it off with  cinematic: "off"  in js/config.js (CSS is under "CINEMATIC" in style.css) */
 const CINE=!/^(off|false|no|0)$/i.test(G('cinematic'));VW.classList.toggle('cine',CINE);
 const ICO={heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
  share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5"/><path d="m7.5 7.5 4.5-4.5 4.5 4.5"/><path d="M5 12.5V18a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18v-5.5"/></svg>',
@@ -197,12 +197,15 @@ function rlImg(m,u,box){const g=pic({url:u,thumb:u,title:m.title,e:m.e},0,1);g.c
  return g}
 function rlCar(m,P,item){const car=el('div','rl-car');car._n=P.length;car._i=0;car._P=P;car._m=m;car._it=item;      // a carousel post: its own sideways track; at its last picture the next swipe moves to the next post
  for(let k=0;k<P.length;k++)car.append(el('div','rl-slide'));carFill(car,0);let tk=0;
- car.addEventListener('scroll',()=>{if(tk)return;tk=requestAnimationFrame(()=>{tk=0;const w=car.clientWidth;if(!w)return;const k=Math.max(0,Math.min(car._n-1,Math.round(car.scrollLeft/w)));if(k!==car._i){car._i=k;carFill(car,k);carSeg(car)}})},{passive:true});
+ car.addEventListener('scroll',()=>{if(tk)return;tk=requestAnimationFrame(()=>{tk=0;const w=car.clientWidth;if(!w)return;const k=Math.max(0,Math.min(car._n-1,Math.round(car.scrollLeft/w)));if(k!==car._i){car._i=k;carFill(car,k);carSeg(car);ambSet(car._it,car._P[k])}})},{passive:true});
  return car}
 function carFill(car,k){for(let j=k-1;j<=k+1;j++){const sl=car.children[j];if(!sl||sl._f)continue;sl._f=1;sl.append(rlImg(car._m,car._P[j],sl))}}
 function carSeg(car){const sg=car._it&&car._it._sg;if(sg)[...sg.children].forEach((x,k)=>{x.className=k<car._i?'dn':k==car._i?'on':''})}
 function carTo(car,k,smooth){k=Math.max(0,Math.min(car._n-1,k));carFill(car,k);car.scrollTo({left:k*car.clientWidth,behavior:smooth&&!RM?'smooth':'auto'})}
 const curCar=()=>{const s=RL.children[GI];return s&&s.querySelector('.rl-car')};
+/* ambient glow: a big, blurred, slowly drifting copy of the picture sits BEHIND it, so the photo's own colours (kept dark and muted by the CSS) light up the space around it, never the photo itself.
+   A carousel post follows the picture that is on screen. */
+function ambSet(item,u){const a=item&&item._amb;if(a&&u&&a._u!==u){a._u=u;a.style.backgroundImage='url('+JSON.stringify(u)+')'}}
 /* a post made from the #admin / #founder link: the round avatar is the class logo (same image files as the message badges: founderBadge / teamBadge in config.js, else the class logo) */
 function staffAv(k){const d=BADGES[k],u=DR(G(d.cfg),1),use=safe(u)?u:CONFIG.logo,a=el('span','rl-av logo');a.title=d.label;
  if(ok(use)){const i=new Image();i.src=use;i.alt=d.label;i.decoding='async';a.append(i)}else a.append('✓');return a}
@@ -223,6 +226,7 @@ function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=
  if(id){const b=el('button','rl-lk');b.type='button';b.append(svgOf('heart'),el('span','n','0'));b.onclick=ev=>{ev.stopPropagation();toggleLike(id)};lkReg(id,b);act.append(b)}
  if(!m.ev&&!SOLO()&&(m.id||m.pid)){const b=el('button','rl-sh');b.type='button';b.setAttribute('aria-label','Share');b.append(svgOf('share'),el('span','n','Share'));b.onclick=ev=>{ev.stopPropagation();shareMem(m)};act.append(b)}
  if(m.id)act.append(kebab('photo',m));
+ if(CINE&&!m.ev&&P[0]){const amb=el('div','rl-amb');amb.setAttribute('aria-hidden','true');s._amb=amb;ambSet(s,P[0]);s.append(amb)}      // first child = painted behind the picture
  ui.append(info,act);s.append(media,el('div','rl-shade'),ui)}
 /* category tag (top-left of every post): tap it -> the viewer shows only that category. While a category is active an ALL button appears beside it to show everything again.
    It only changes the viewer's own filter (VC); the board behind keeps its filter. In a single shared photo (solo) the tag stays a plain label. */

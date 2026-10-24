@@ -12,13 +12,13 @@ window.SITE = {
   music: "assets/audio/music1.mp3",       // put your mp3 here (plays with the intro)
   gradsound: "assets/audio/grad.mp3",                         // graduation-day sound, e.g. assets/audio/grad.mp3
   milestones: ``,                        // countdown sounds, one per line: 50=assets/audio/50days.mp3
-  /* cinematic dark lighting on the photo viewer (vignette + warm/cool light + deeper contrast):  "on"  or  "off"  */
+  /* cinematic ambient light around the photo in the viewer (moving glow made from the photo's own colours, kept dark / grey):  "on"  or  "off"  */
   cinematic: "on",
   /* staff badges: the small round mark next to the name of messages sent from the #founder link / the #admin link (tap it -> a tiny popup: المؤسس / تيم التخرج).
      Put the image in assets/ (square, any size). Empty = the class logo is used. */
   founderBadge: "assets/badge-logo.webp",                   // messages sent from  yoursite/#founder
   teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
-  backend: "https://script.google.com/macros/s/AKfycbxxac1s8H7W7_yz2noqiedX4I1vd0hKnt0SJKqe_vPN9iaTvCwvSh0aO9-FtCuvWmIg/exec",                           // Google Apps Script Web app URL (see README.md)
+  backend: "https://script.google.com/macros/s/AKfycbyJyDzD78sRD1YiRPLMBrxYGcQUbZaEbMTQKOq6oNmc2JYFNWgVwOpBVutYU437wTCT/exec",                           // Google Apps Script Web app URL (see README.md)
 
   intro: `SENIORS 2026
 5 years. 10 semesters. One dream.
