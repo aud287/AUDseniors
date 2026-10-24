@@ -31,7 +31,7 @@ sleeping_face | SLEEP IS OPTIONAL
 brain | WHAT WAS THAT MNEMONIC AGAIN?
 party_popper | WE MADE IT`,
 
-  /* ===== المشروع الخيري للدفعة (Charity project) — كل شيء هنا ===== */
+  /* ===== المشروع الخيري (Charity project) — كل شيء هنا ===== */
   charityTitle: `المشروع الخيري للدفعة`,
   charityText: `شاركنا في المشروع الخيري للدفعة. كل مساهمة، مهما كانت بسيطة، بتفرق.`,
   charityImage: `assets/charity.webp`,                      // ضع صورة التصميم في assets/ واكتب مسارها هنا، مثال: assets/charity.jpg  (فاضي = تظهر "التصميم قريبًا")
