@@ -150,7 +150,7 @@ let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(strings,200
 let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false,RLB=false;            // list shown · current index · mode · filter · sort · grid built? · reel built?
 const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=2000;
 const ICO={heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
- share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3 3 10.3l6.6 2.6L12.2 20z"/><path d="M9.6 12.9 21.5 3"/></svg>',
+ share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5"/><path d="m7.5 7.5 4.5-4.5 4.5 4.5"/><path d="M5 12.5V18a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18v-5.5"/></svg>',
  dots:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
  stack:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="13" height="13" rx="2.5"/><path d="M16 19.5H5.5A2.5 2.5 0 0 1 3 17V7"/></svg>'};
 const ICT={},svgOf=k=>(ICT[k]||(ICT[k]=(()=>{const t=document.createElement('template');t.innerHTML=ICO[k];return t.content.firstChild})())).cloneNode(true);
@@ -188,7 +188,7 @@ function vGrid(){const g=$('#vwgrid');g.replaceChildren();let last='';VG=true;
 /* ---------- reels ---------- */
 let RLF=new Set(),AUTO=false,AT=0,HOLD=0,RLFIX=0,tapT=0,tapX=0,tapY=0,dX=0,dY=0,dT=0;      // posts holding images · auto-scroll on · its timer · finger down · re-aligning after a resize · last tap / press
 function rlBuild(){RLF=new Set();const f=document.createDocumentFragment();
- VALL.forEach((m,i)=>{const s=el('section','rl-item');s.dataset.i=i;s.setAttribute('role','group');s.setAttribute('aria-roledescription','slide');s.setAttribute('aria-label',(i+1)+' of '+VALL.length);f.append(s)});
+ VALL.forEach((m,i)=>{const s=el('div','rl-item');s.dataset.i=i;s.setAttribute('role','group');s.setAttribute('aria-roledescription','slide');s.setAttribute('aria-label',(i+1)+' of '+VALL.length);f.append(s)});
  RL.replaceChildren(f);RLB=true}
 function rlImg(m,u,box){const g=pic({url:u,thumb:u,title:m.title,e:m.e},0,1);g.classList.add('rl-img');g.draggable=false;
  if(g.tagName=='IMG'&&!g.complete){box.classList.add('ld');const end=()=>box.classList.remove('ld');g.addEventListener('load',end,{once:true});g.addEventListener('error',()=>setTimeout(end,4000),{once:true})}

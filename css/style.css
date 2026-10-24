@@ -1237,21 +1237,21 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 .vw-view{flex:1;min-height:0;display:flex;flex-direction:column}
 .vw-view[hidden],.vw-grid[hidden]{display:none}
 
-/* ---- reels: one post per screen, flipped sideways; black bars around any picture that does not fill the screen ---- */
+/* ---- reels: one post per screen, flipped vertically; black bars around any picture that does not fill the screen ---- */
 .rl-wrap{position:relative;flex:1;min-height:0;display:flex;border-radius:16px;overflow:hidden;background:#000}
 .rl{flex:1;min-width:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;overscroll-behavior:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;outline:none}
 .rl::-webkit-scrollbar,.rl-car::-webkit-scrollbar{display:none}
-.rl-item{position:relative;flex:0 0 100%;width:100%;height:100%;min-height:100%;overflow:hidden;background:#000;scroll-snap-align:start;scroll-snap-stop:always;contain:layout paint}
+.rl-item{position:relative;flex:0 0 100%;width:100%;max-width:none;margin:0;padding:0;height:100%;min-height:100%;overflow:hidden;background:#000;scroll-snap-align:start;scroll-snap-stop:always;contain:layout paint}
 .rl-media{position:absolute;inset:0;display:grid;place-items:center;background:#000;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.rl-img{width:100%;height:100%;object-fit:contain;display:block;animation:vwin .35s var(--e) both}
-.rl-media>.em.rl-img,.rl-slide>.em.rl-img{display:grid;place-items:center;width:min(70vw,340px);height:auto;aspect-ratio:1;font-size:96px;border-radius:16px}
+.rl-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;animation:vwin .35s var(--e) both}      /* pinned to its box: the WHOLE picture always shows (black bars when the shape differs) */
+.rl-media>.em.rl-img,.rl-slide>.em.rl-img{position:static;inset:auto;display:grid;place-items:center;width:min(70vw,340px);height:auto;aspect-ratio:1;font-size:96px;border-radius:16px}
 .rl-media>.rl-em{font-size:110px;text-align:center}
 .rl-media>img.rl-em{width:min(46vw,220px);height:auto}
 .rl-media.ld::after,.rl-slide.ld::after{content:"";position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #ffffff44;border-top-color:var(--gold);animation:vwspin .8s linear infinite}
 .rl-media.ld>.rl-img,.rl-slide.ld>.rl-img{opacity:0}
 .rl-car{position:absolute;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .rl-slide{position:relative;flex:0 0 100%;width:100%;height:100%;scroll-snap-align:start;scroll-snap-stop:always;display:grid;place-items:center;background:#000}
-.rl-shade{position:absolute;left:0;right:0;bottom:0;height:48%;background:linear-gradient(transparent,#000000b8 80%);pointer-events:none}
+.rl-shade{position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(transparent,#00000099);pointer-events:none}
 .rl-ui{position:absolute;inset:0;margin:0 auto;max-width:640px;pointer-events:none}
 .rl-ui>*{pointer-events:auto}
 .rl-seg{position:absolute;top:10px;left:12px;right:12px;display:flex;gap:4px;pointer-events:none}
@@ -1262,16 +1262,16 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 .rl-cb{display:none;position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;background:#0000006e;color:#fff;font-size:22px;line-height:1;place-items:center;padding-bottom:2px;transition:background .2s}
 .rl-cp{left:8px}.rl-cn{right:8px}
 @media(hover:hover) and (pointer:fine){.rl-cb{display:grid}.rl-cb:hover{background:#000000b0}}
-.rl-info{position:absolute;left:14px;right:84px;bottom:16px;display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;color:#fff}
-.rl-who{display:flex;align-items:center;gap:9px;min-width:0}
+.rl-info{position:absolute;left:84px;right:14px;bottom:16px;display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;color:#fff;text-align:right}      /* name + caption on the RIGHT, whatever the language */
+.rl-who{display:flex;flex-direction:row-reverse;align-items:center;justify-content:flex-start;gap:9px;min-width:0}      /* avatar farthest right, then the name, then the date */
 .rl-av{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:800 15px 'DM Sans',var(--ar),sans-serif;color:#fff;border:2px solid #ffffffcc}
-.rl-nm{min-width:0;font:800 15px/1.2 'DM Sans',var(--ar),sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 6px #000a}
-.rl-dt{flex:none;font:600 12px 'DM Sans',sans-serif;opacity:.78;white-space:nowrap}
-.rl-dt:before{content:"·";margin-right:8px}
-.rl-cap{margin:0;font:500 14px/1.55 'DM Sans',var(--ar),sans-serif;color:#fff;text-shadow:0 1px 6px #000a;white-space:pre-line;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.rl-nm{min-width:0;text-align:right;font:800 15px/1.2 'DM Sans',var(--ar),sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 6px #000a}
+.rl-dt{flex:none;direction:ltr;font:600 12px 'DM Sans',sans-serif;opacity:.78;white-space:nowrap}
+.rl-dt:after{content:"·";margin-left:8px}
+.rl-cap{margin:0;font:500 14px/1.55 'DM Sans',var(--ar),sans-serif;color:#fff;text-shadow:0 1px 6px #000a;white-space:pre-line;overflow-wrap:anywhere;text-align:right;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .rl-cap.open{display:block;-webkit-line-clamp:unset;line-clamp:unset;max-height:34vh;overflow:auto}
-.rl-more{align-self:flex-start;padding:2px 0;font:700 12px 'DM Sans',sans-serif;color:var(--gold)}
-.rl-act{position:absolute;right:10px;bottom:14px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.rl-more{align-self:flex-end;padding:2px 0;font:700 12px 'DM Sans',sans-serif;color:var(--gold)}
+.rl-act{position:absolute;left:10px;bottom:14px;display:flex;flex-direction:column;align-items:center;gap:12px}
 .rl-lk,.rl-sh{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:50px;min-height:48px;color:#fff;text-shadow:0 1px 6px #000a}
 .rl-lk svg,.rl-sh svg{width:30px;height:30px;filter:drop-shadow(0 2px 6px #0008);transition:transform .2s var(--e)}
 .rl-lk svg path,.rl-sh svg path{fill:none;stroke:#fff;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round}
@@ -1290,6 +1290,20 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 .vw-p{top:calc(50% - 52px)}.vw-n{top:calc(50% + 6px)}      /* ▲ ▼ stacked on the right edge */
 @media(max-width:700px),(pointer:coarse){.vw-nav{display:none}}
 
+/* wide screens (laptop / desktop): the picture gets its own area; name + caption sit in the right gutter and like / share in the left one, so nothing is ever drawn on top of the picture */
+@media(min-width:900px){
+ .rl-wrap{--g:clamp(220px,16vw,280px);--gl:var(--g);--gr:var(--g)}      /* equal side gutters: the picture stays centred */
+ dialog.vw.rl-on .vw-in{max-width:none}
+ .rl-media{inset:0 var(--gr) 0 var(--gl)}
+ .rl-shade{display:none}
+ .rl-ui{max-width:none;margin:0}
+ .rl-info{left:auto;right:16px;width:calc(var(--gr) - 32px);bottom:20px}
+ .rl-act{left:16px;bottom:20px}
+ .rl-seg{left:calc(var(--gl) + 12px);right:calc(var(--gr) + 12px)}
+ .rl-tag{left:calc(var(--gl) + 12px)}
+ .rl-cp{left:calc(var(--gl) + 10px)}.rl-cn{right:calc(var(--gr) + 10px)}
+ .vw-nav{right:calc(var(--gr) + 12px)}
+}
 /* ---- grid: square tiles; category tag top-left, ♥ count bottom-left (a stack mark bottom-right = carousel post) ---- */
 .vw-grid{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--gold) #ffffff14;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));grid-auto-rows:auto;gap:14px;align-content:start;padding:0 8px 28px 2px}
 .vw-grid::-webkit-scrollbar{width:8px}.vw-grid::-webkit-scrollbar-track{background:#ffffff14;border-radius:99px}.vw-grid::-webkit-scrollbar-thumb{background:var(--gold);border-radius:99px}
