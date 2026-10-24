@@ -117,7 +117,7 @@ function setCat(t){cat=t;$$('.chip').forEach(x=>x.classList.toggle('on',x.datase
 function setSort(v){sortDir=v;$('#psort').value=v;board()}
 function openAdd(){$('#am').showModal()}
 /* small promise-based confirm (replaces the browser confirm box) */
-function ask(t,p,okLabel){return new Promise(res=>{const d=$('#ask');$('#askt').textContent=t;$('#askp').textContent=p||'';d.querySelector('.dng').textContent=okLabel||'DELETE';d.returnValue='';d.onclose=()=>res(d.returnValue==='ok');d.showModal()})}
+function ask(t,p,okLabel,noLabel){return new Promise(res=>{const d=$('#ask');$('#askt').textContent=t;$('#askp').textContent=p||'';d.querySelector('.dng').textContent=okLabel||'DELETE';d.querySelector('.btn.g').textContent=noLabel||'KEEP IT';d.returnValue='';d.onclose=()=>res(d.returnValue==='ok');d.showModal()})}
 $$('dialog.sheet').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close()}));
 const byDate=(a,b)=>{const A=String(a.date||''),B=String(b.date||'');return sortDir=='new'?(A<B?1:A>B?-1:0):(A<B?-1:A>B?1:0)};
 const list=()=>MEM.filter(m=>cat=='ALL'||(m.cat||'').toUpperCase()==cat).slice().sort(byDate);
@@ -132,8 +132,7 @@ function slot(m,i,L){const s=el('div','slot'),b=el('button',m.ev?'note':'pol');b
  b.setAttribute('aria-label',(m.ev?'Event: ':'Photo: ')+m.title);
  if(m.ev)b.append(ic(m.e||'📌','em'),el('small','',fmt(m.date)),el('b','',m.title));
  else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
- b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete photo');d.onclick=ev=>{ev.stopPropagation();del('photo',m.id)};s.append(d);
-  if(m.bn){const k=el('button','banb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('photo',m)};s.append(k)}}return s}
+ b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id)s.append(kebab('photo',m));return s}
 function strings(){const B=$('#board'),r=B.getBoundingClientRect(),P=$$('#grid .pin').map(p=>{const q=p.getBoundingClientRect();return[q.left+q.width/2-r.left-B.clientLeft,q.top+q.height/2-r.top-B.clientTop]});let h='';
  const ln=(a,b,c)=>{h+='<path pathLength="1" stroke="'+c+'" d="M'+a[0]+' '+a[1]+'Q'+(a[0]+b[0])/2+' '+((a[1]+b[1])/2+Math.hypot(a[0]-b[0],a[1]-b[1])*.12+14)+' '+b[0]+' '+b[1]+'"/>'};
  P.forEach((p,i)=>{if(P[i+1])ln(p,P[i+1],'#b3202e');if(i%2==0&&P[i+2])ln(p,P[i+2],'#2f6b45')});$('#str').innerHTML=h}
@@ -146,79 +145,177 @@ function chipsR(){const c=$('#chips'),p=$('#pc');[c,p].forEach(x=>x.replaceChild
  const cs=[...new Set([...G('cats').split(/[,\n]/).map(x=>x.trim().toUpperCase()),...MEM.map(m=>(m.cat||'').toUpperCase())].filter(Boolean))];
  ['ALL',...cs].forEach(t=>{const b=el('button','chip'+(t==cat?' on':''),t);b.type='button';b.dataset.cat=t;b.onclick=()=>setCat(t);c.append(b);if(t!='ALL')p.append(new Option(t,t))})}
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(strings,200)});addEventListener('load',strings);
-/* ---- memories viewer: one photo at a time (swipe / arrows / filmstrip) or a grid of all of them; follows the filter ---- */
-let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false;                          // list shown · current index · mode · filter · sort · grid built?
-const VW=$('#vw'),vNorm=m=>(m.cat||'').toUpperCase();
+/* ---- memories viewer: a GRID of every photo, and a "reels" viewer (one post per screen, flipped sideways; carousel posts; like · share · auto-scroll). Both follow the filter. ----
+   Reel DOM is built lazily: one empty box per post, and only the posts near the current one hold images (the rest are emptied again), so a thousand photos stay light. */
+let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false,RLB=false;            // list shown · current index · mode · filter · sort · grid built? · reel built?
+const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=4500;
+const ICO={heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
+ share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3 3 10.3l6.6 2.6L12.2 20z"/><path d="M9.6 12.9 21.5 3"/></svg>',
+ dots:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+ stack:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="13" height="13" rx="2.5"/><path d="M16 19.5H5.5A2.5 2.5 0 0 1 3 17V7"/></svg>'};
+const ICT={},svgOf=k=>(ICT[k]||(ICT[k]=(()=>{const t=document.createElement('template');t.innerHTML=ICO[k];return t.content.firstChild})())).cloneNode(true);
+const kfmt=n=>n>=1e6?(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'M':n>=1e3?(n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,'')+'K':String(n);
+const picsOf=m=>m.pics&&m.pics.length>1?m.pics:[m.url];                    // every picture of a post (a carousel has more than one)
+/* ---- likes: a like is the "love" reaction on the photo's id, so it goes through the SAME durable pipeline as the wall reactions (one per device, kept on this device until the server confirms, re-sent if the network drops).
+   A photo that only exists in config.js has no id on the server: it can be liked only when no backend is connected (demo), and the heart is hidden otherwise. ---- */
+const likeId=m=>m.ev?'':(m.id||(BACKEND.enabled?'':pidOf(m))),likeCount=id=>((RX[id]||{}).love)|0;
+const LKE=new Map();                                                       // photo id -> the hearts / counters on screen for it (pruned when they leave the page, so it can not grow)
+function lkPaint(e,id){const mine=MINE[id]==='love',n=likeCount(id);e.classList.toggle('on',mine);const s=e.querySelector('.n');if(s)s.textContent=kfmt(n);
+ if(e.tagName==='BUTTON'){e.setAttribute('aria-pressed',String(mine));e.setAttribute('aria-label',(mine?'Unlike':'Like')+' ('+n+')')}}
+function lkReg(id,e){id=String(id);let s=LKE.get(id);if(!s)LKE.set(id,s=new Set());s.forEach(x=>{if(!x.isConnected)s.delete(x)});s.add(e);lkPaint(e,id)}
+function lkDraw(id){id=String(id);const s=LKE.get(id);if(!s)return;s.forEach(e=>{if(e.isConnected)lkPaint(e,id);else s.delete(e)});if(!s.size)LKE.delete(id)}
+function toggleLike(id,onlyLike){id=String(id);const was=MINE[id]==='love';if(onlyLike&&was)return;react({id:id},was?'':'love');
+ const s=LKE.get(id);if(s&&!was)s.forEach(e=>{if(e.classList.contains('rl-lk')){e.classList.remove('pop');void e.offsetWidth;e.classList.add('pop')}})}
+async function shareMem(m){const id=m.id||m.pid,url=location.href.split('#')[0]+'#m='+encodeURIComponent(id),title=(CONFIG.className||'Memories')+' · '+(clean(m.name,30)||'Memory');
+ if(navigator.share){try{await navigator.share({title:title,text:m.cp||'',url:url});return}catch(e){if(e&&e.name==='AbortError')return}}
+ copyText(url,'Link copied!')}
 function vList(){const A=String,k=(a,b)=>{const x=A(a.date||''),y=A(b.date||'');return VS=='new'?(x<y?1:x>y?-1:0):(x<y?-1:x>y?1:0)};
  return MEM.filter(m=>!m.ev&&(VC=='ALL'||vNorm(m)==VC)).slice().sort(k)}
 function vChips(){const all=MEM.filter(m=>!m.ev),n={};all.forEach(m=>{const c=vNorm(m);if(c)n[c]=(n[c]||0)+1});
  const box=$('#vwchips');box.replaceChildren();
  [['ALL',all.length]].concat(Object.keys(n).map(c=>[c,n[c]])).forEach(([c,k])=>{const b=el('button','vw-chip');b.type='button';b.setAttribute('aria-pressed',String(c==VC));
   b.append(el('span','',c),el('i','',String(k)));b.onclick=()=>{if(VC==c)return;VC=c;vRefresh()};box.append(b)})}
-/* staff tools for one photo: delete it / block the device that sent it. Same actions as on the board, but reachable from every place a photo is shown in the gallery.
-   CSS shows them only while a staff link is active (body.adm), so they also appear if the key is accepted after the gallery was opened. Photos without an id (set in config.js) have nothing to delete. */
-function staffTools(m,cls,words){if(!m.id)return null;const w=el('div',cls);
- const d=el('button','vw-del',words?'✕ Delete photo':'✕');d.type='button';d.setAttribute('aria-label','Delete photo');d.title='Delete photo';d.onclick=ev=>{ev.stopPropagation();del('photo',m.id)};w.append(d);
- if(m.bn){const k=el('button','vw-ban',words?'🚫 Block device':'🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('photo',m)};w.append(k)}
- return w}
-function vGo(d){if(VALL.length<2)return;GI=(GI+d+VALL.length)%VALL.length;vFill()}
-function vFill(){const m=VALL[GI];if(!m)return;const f=$('#vwfig'),solo=VW.classList.contains('solo');f.replaceChildren();
- const im=m.ev?ic(m.e||'🎓','em'):pic(m,GI,1);im.classList.add('vw-img');f.classList.remove('ld');
- if(im.tagName=='IMG'&&!im.complete){f.classList.add('ld');const end=()=>f.classList.remove('ld');im.addEventListener('load',end);im.addEventListener('error',()=>setTimeout(end,4000))}
- f.append(im);
- const cap=$('#vwcap');cap.replaceChildren();if(m.title)cap.append(el('h3','',m.title));if(m.cap&&m.cap!==m.title)cap.append(el('p','',m.cap));
- const meta=[m.cat,fmt(m.date)].filter(Boolean).join('  ·  ');if(meta)cap.append(el('small','',meta));
- if(!solo){const t=staffTools(m,'vw-adm',1);if(t)cap.append(t)}
- if(!solo){$('#vwcount').textContent=(GI+1)+' / '+VALL.length;
-  const s=$('#vwstrip');[...s.children].forEach((b,i)=>{const on=i===GI;b.classList.toggle('on',on);if(on)b.setAttribute('aria-current','true');else b.removeAttribute('aria-current')});
-  const cur=s.children[GI];if(cur)s.scrollTo({left:cur.offsetLeft-(s.clientWidth-cur.offsetWidth)/2,behavior:'smooth'})}
- [1,-1].forEach(d=>{const n=VALL[(GI+d+VALL.length)%VALL.length],u=n&&!n.ev&&n.url;if(safe(u))new Image().src=u})}
-function vStrip(){const s=$('#vwstrip');s.replaceChildren();
- VALL.forEach((m,i)=>{const b=el('button');b.type='button';b.setAttribute('aria-label','Photo '+(i+1)+(m.title?': '+m.title:''));
-  const g=pic(m,i);g.loading=i<12?'eager':'lazy';g.fetchPriority='low';b.append(g);b.onclick=()=>{GI=i;vFill()};s.append(b)})}
+const vCount=()=>{$('#vwcount').textContent=VM=='grid'||!VALL.length?VALL.length+(VALL.length==1?' photo':' photos'):(GI+1)+' / '+VALL.length};
+/* ---------- grid: category tag on top-left, ♥ count on bottom-left, a small "stack" mark on carousel posts ---------- */
 function vGrid(){const g=$('#vwgrid');g.replaceChildren();let last='';VG=true;
  VALL.forEach((m,i)=>{const d=new Date(m.date),k=isNaN(d)?'':d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   if(k&&k!==last){last=k;g.append(el('h4','vw-h',k))}
   const b=el('button','vw-cell'+(i===GI?' on':''));b.type='button';b.setAttribute('aria-label','Open photo '+(i+1)+(m.title?': '+m.title:''));
-  const p=pic(m,i);p.loading=i<18?'eager':'lazy';b.append(p);if(m.cat)b.append(el('span','vw-cat',m.cat));if(m.title)b.append(el('span','vw-cp',m.title));
-  b.onclick=()=>{GI=i;vMode('view')};const w=el('div','vw-w');w.append(b);const t=staffTools(m,'vw-tools');if(t)w.append(t);g.append(w)})}
-function vMode(m){VM=m;const grid=m=='grid';$('#vwview').hidden=grid;$('#vwgrid').hidden=!grid;
+  const p=pic(m,i);p.loading=i<18?'eager':'lazy';b.append(p);if(m.cat)b.append(el('span','vw-cat',m.cat));
+  const id=likeId(m),lk=el('span','vw-lk');lk.append(svgOf('heart'),el('b','n','0'));b.append(lk);if(id)lkReg(id,lk);
+  if(picsOf(m).length>1){const x=el('span','vw-multi');x.title=picsOf(m).length+' photos';x.append(svgOf('stack'));b.append(x)}
+  b.onclick=()=>{GI=i;vMode('view')};const w=el('div','vw-w');w.append(b);if(m.id)w.append(kebab('photo',m));g.append(w)})}
+/* ---------- reels ---------- */
+let RLF=new Set(),AUTO=false,AT=0,HOLD=0,RLFIX=0,tapT=0,tapX=0,tapY=0,dX=0,dY=0,dT=0;      // posts holding images · auto-scroll on · its timer · finger down · re-aligning after a resize · last tap / press
+function rlBuild(){RLF=new Set();const f=document.createDocumentFragment();
+ VALL.forEach((m,i)=>{const s=el('section','rl-item');s.dataset.i=i;s.setAttribute('role','group');s.setAttribute('aria-roledescription','slide');s.setAttribute('aria-label',(i+1)+' of '+VALL.length);f.append(s)});
+ RL.replaceChildren(f);RLB=true}
+function rlImg(m,u,box){const g=pic({url:u,thumb:u,title:m.title,e:m.e},0,1);g.classList.add('rl-img');g.draggable=false;
+ if(g.tagName=='IMG'&&!g.complete){box.classList.add('ld');const end=()=>box.classList.remove('ld');g.addEventListener('load',end,{once:true});g.addEventListener('error',()=>setTimeout(end,4000),{once:true})}
+ return g}
+function rlCar(m,P,item){const car=el('div','rl-car');car._n=P.length;car._i=0;car._P=P;car._m=m;car._it=item;      // a carousel post: its own sideways track; at its last picture the next swipe moves to the next post
+ for(let k=0;k<P.length;k++)car.append(el('div','rl-slide'));carFill(car,0);let tk=0;
+ car.addEventListener('scroll',()=>{if(tk)return;tk=requestAnimationFrame(()=>{tk=0;const w=car.clientWidth;if(!w)return;const k=Math.max(0,Math.min(car._n-1,Math.round(car.scrollLeft/w)));if(k!==car._i){car._i=k;carFill(car,k);carSeg(car)}})},{passive:true});
+ return car}
+function carFill(car,k){for(let j=k-1;j<=k+1;j++){const sl=car.children[j];if(!sl||sl._f)continue;sl._f=1;sl.append(rlImg(car._m,car._P[j],sl))}}
+function carSeg(car){const sg=car._it&&car._it._sg;if(sg)[...sg.children].forEach((x,k)=>{x.className=k<car._i?'dn':k==car._i?'on':''})}
+function carTo(car,k,smooth){k=Math.max(0,Math.min(car._n-1,k));carFill(car,k);car.scrollTo({left:k*car.clientWidth,behavior:smooth&&!RM?'smooth':'auto'})}
+const curCar=()=>{const s=RL.children[GI];return s&&s.querySelector('.rl-car')};
+function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=1;RLF.add(i);
+ const media=el('div','rl-media'),ui=el('div','rl-ui'),P=m.ev?[]:picsOf(m);let car=null;
+ if(m.ev)media.append(ic(m.e||'🎓','rl-em'));else if(P.length>1){car=rlCar(m,P,s);media.append(car)}else media.append(rlImg(m,P[0],media));
+ if(car){ui.classList.add('car');const sg=el('div','rl-seg');for(let k=0;k<P.length;k++)sg.append(el('i',k?'':'on'));s._sg=sg;ui.append(sg);
+  [['rl-cb rl-cp','‹','Previous picture',-1],['rl-cb rl-cn','›','Next picture',1]].forEach(([c,t,l,d])=>{const b=el('button',c,t);b.type='button';b.setAttribute('aria-label',l);b.onclick=ev=>{ev.stopPropagation();carTo(car,car._i+d,true)};ui.append(b)})}
+ if(m.cat)ui.append(el('span','rl-tag',m.cat));
+ const info=el('div','rl-info'),who=el('div','rl-who'),nm=m.ev?(m.title||''):(clean(m.name,30)||CONFIG.className||'Memory'),av=el('span','rl-av',m.ev?'🎓':(Array.from(nm)[0]||'?').toUpperCase()),hue=parseInt(h32(nm),36)%360;
+ av.style.background='linear-gradient(135deg,hsl('+hue+' 62% 44%),hsl('+(hue+40)%360+' 66% 28%))';
+ const nb=el('b','rl-nm',nm);nb.dir='auto';who.append(av,nb);if(m.date)who.append(el('time','rl-dt',fmt(m.date)));info.append(who);
+ const tx=m.ev?(m.cap||''):(m.cp||'');
+ if(tx){const cp=el('p','rl-cap',tx),more=el('button','rl-more','more');cp.dir='auto';more.type='button';more.hidden=true;
+  more.onclick=ev=>{ev.stopPropagation();more.textContent=cp.classList.toggle('open')?'less':'more'};info.append(cp,more);
+  requestAnimationFrame(()=>{if(cp.scrollHeight>cp.clientHeight+2)more.hidden=false})}
+ const act=el('div','rl-act'),id=likeId(m);
+ if(id){const b=el('button','rl-lk');b.type='button';b.append(svgOf('heart'),el('span','n','0'));b.onclick=ev=>{ev.stopPropagation();toggleLike(id)};lkReg(id,b);act.append(b)}
+ if(!m.ev&&!SOLO()&&(m.id||m.pid)){const b=el('button','rl-sh');b.type='button';b.setAttribute('aria-label','Share');b.append(svgOf('share'),el('span','n','Share'));b.onclick=ev=>{ev.stopPropagation();shareMem(m)};act.append(b)}
+ if(m.id)act.append(kebab('photo',m));
+ ui.append(info,act);s.append(media,el('div','rl-shade'),ui)}
+const rlFillAround=i=>{for(let k=i-1;k<=i+2;k++)rlItem(k)};
+function rlTrim(i){RLF.forEach(k=>{if(Math.abs(k-i)>5){const s=RL.children[k];if(s){s._f=0;s._sg=null;s.replaceChildren()}RLF.delete(k)}})}      // far-away posts give their pictures back
+function setCur(i){if(i===GI&&RLF.has(i))return;GI=i;rlFillAround(i);rlTrim(i);vCount();rlSched()}
+function rlGo(i,smooth){const n=VALL.length,w=RL.clientWidth;if(!n||!w)return;i=Math.max(0,Math.min(n-1,i));rlFillAround(i);RL.scrollTo({left:i*w,behavior:smooth&&!RM?'smooth':'auto'})}
+function vGo(d){const n=VALL.length;if(n<2)return;const j=GI+d;if(j<0||j>=n)rlGo((j+n)%n,false);else rlGo(j,true)}      // past the end it wraps around without a long slide
+function rlStep(d){const c=curCar();if(c){const k=c._i+d;if(k>=0&&k<c._n){carTo(c,k,true);return}}vGo(d)}      // keyboard / auto: finish a post's pictures first, then the next post
+let rlTk=0;RL.addEventListener('scroll',()=>{if(rlTk)return;rlTk=requestAnimationFrame(()=>{rlTk=0;const w=RL.clientWidth;if(RLFIX||!VW.open||VM!=='view'||!w||!VALL.length)return;setCur(Math.max(0,Math.min(VALL.length-1,Math.round(RL.scrollLeft/w))))})},{passive:true});
+/* auto-scroll: every few seconds goes to the next picture / post. It waits while a finger or button is held, while another window is open, and while the page is hidden. */
+function rlSched(){clearTimeout(AT);AT=0;if(!AUTO||HOLD||!VW.open||VM!=='view'||SOLO()||document.hidden||!VALL.length)return;AT=setTimeout(rlTick,AUTO_MS)}
+function rlTick(){AT=0;if(!AUTO||!VW.open||VM!=='view'||document.hidden)return;
+ if(HOLD||KMOPEN||document.querySelector('dialog[open]:not(#vw)')){rlSched();return}
+ rlStep(1);rlSched()}
+function setAuto(on){AUTO=!!on&&!SOLO();const b=$('#vwauto');b.setAttribute('aria-pressed',String(AUTO));b.classList.toggle('on',AUTO);rlSched()}
+$('#vwauto').onclick=()=>setAuto(!AUTO);
+document.addEventListener('visibilitychange',rlSched);
+RL.addEventListener('pointerdown',e=>{dX=e.clientX;dY=e.clientY;dT=e.timeStamp;HOLD=1;clearTimeout(AT)},{passive:true});
+['pointerup','pointercancel','blur'].forEach(t=>addEventListener(t,()=>{if(HOLD){HOLD=0;rlSched()}},{passive:true}));
+/* double-tap (or double-click) the picture = like it, with a heart that pops where you tapped (it never un-likes: use the heart button for that) */
+RL.addEventListener('pointerup',e=>{const t=e.target;if(!t.closest||!t.closest('.rl-media'))return;
+ if(Math.hypot(e.clientX-dX,e.clientY-dY)>10||e.timeStamp-dT>400)return;
+ if(e.timeStamp-tapT<320&&Math.hypot(e.clientX-tapX,e.clientY-tapY)<40){tapT=0;const s=t.closest('.rl-item'),m=s&&VALL[+s.dataset.i],id=m&&likeId(m);if(!id)return;
+  toggleLike(id,true);if(RM)return;const r=s.getBoundingClientRect(),h=el('i','rl-burst');h.append(svgOf('heart'));h.style.left=(e.clientX-r.left)+'px';h.style.top=(e.clientY-r.top)+'px';s.append(h);setTimeout(()=>h.remove(),900)}
+ else{tapT=e.timeStamp;tapX=e.clientX;tapY=e.clientY}});
+let rsT=0;addEventListener('resize',()=>{if(!VW.open||VM!=='view'||!RLB)return;RLFIX=1;cancelAnimationFrame(rsT);rsT=requestAnimationFrame(()=>{RL.scrollTo({left:GI*RL.clientWidth,behavior:'auto'});setTimeout(()=>{RLFIX=0},160)})});      // a resize / rotation keeps the same post on screen
+function vMode(m){VM=m;const grid=m=='grid';VW.classList.toggle('rl-on',!grid);$('#vwview').hidden=grid;$('#vwgrid').hidden=!grid;
  $('#vwmv').setAttribute('aria-pressed',String(!grid));$('#vwmg').setAttribute('aria-pressed',String(grid));
- if(grid){if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));$('#vwcount').textContent=VALL.length+(VALL.length==1?' photo':' photos');
+ if(grid){clearTimeout(AT);closeKm();if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));vCount();
   const c=$('#vwgrid .vw-cell.on');if(c)requestAnimationFrame(()=>c.scrollIntoView({block:'center'}))}
- else vFill()}
+ else{const none=!VALL.length;RL.hidden=none;$('#vwempty').hidden=!none;$('#vwp').hidden=$('#vwn').hidden=VALL.length<2;
+  if(none){RL.replaceChildren();RLF=new Set();RLB=false;vCount()}else{if(!RLB)rlBuild();rlGo(GI,false);vCount();rlSched()}}}
 function vRefresh(near){const keep=VALL[GI]&&pidOf(VALL[GI]);VALL=vList();const at=keep?VALL.findIndex(m=>pidOf(m)===keep):-1;GI=at<0?Math.max(0,Math.min(near||0,VALL.length-1)):at;      // near = where the photo that just went away was, so the viewer lands on its neighbour
- vChips();vStrip();VG=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;
- const none=!VALL.length;$('#vwstage').hidden=none;
- if(none){$('#vwfig').replaceChildren();$('#vwcap').replaceChildren(el('p','','No photos in this category yet.'));$('#vwcount').textContent='0 photos'}
- vMode(VM)}
+ vChips();VG=false;RLB=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;vMode(VM)}
 function openGallery(mode,m){VW.classList.remove('solo');VC=cat;VS=sortDir;VALL=vList();
  if(m){const at=VALL.findIndex(x=>pidOf(x)===pidOf(m));GI=at<0?0:at}else GI=0;
- VM=mode;vChips();vStrip();VG=false;$('#vwsort').value=VS;vMode(mode);vOpen()}
-function openLB(L,i){if(!L.length)return;VW.classList.add('solo');VALL=L;GI=((i%L.length)+L.length)%L.length;$('#vwview').hidden=false;$('#vwgrid').hidden=true;$('#vwstage').hidden=false;vFill();vOpen()}
+ VG=false;RLB=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;vChips();vOpen();vMode(mode)}      // open first: the reel needs the window on screen to measure itself
+function openLB(L,i){if(!L.length)return;VW.classList.add('solo');setAuto(false);VALL=L;GI=((i%L.length)+L.length)%L.length;VG=false;RLB=false;vOpen();vMode('view')}
 function vOpen(){if(VW.open)return;document.body.style.overflow='hidden';try{history.pushState({vw:1},'')}catch(e){}VW.showModal()}
-VW.addEventListener('close',()=>{document.body.style.overflow='';if(history.state&&history.state.vw)history.back()});
+VW.addEventListener('close',()=>{document.body.style.overflow='';clearTimeout(AT);closeKm();setAuto(false);RL.replaceChildren();RLF=new Set();RLB=false;$('#vwgrid').replaceChildren();VG=false;      // nothing stays in memory once it is closed
+ if(history.state&&history.state.vw)history.back()});
 addEventListener('popstate',()=>{if(VW.open)VW.close()});
 $('#vwx').onclick=()=>VW.close();$('#vwp').onclick=()=>vGo(-1);$('#vwn').onclick=()=>vGo(1);
 $('#vwmv').onclick=()=>vMode('view');$('#vwmg').onclick=()=>vMode('grid');
 $('#vwsort').onchange=e=>{VS=e.target.value;vRefresh()};
-(function(){const t=$('#vwstage');let sx=0,sy=0,on=0;                     // swipe left / right on the photo
- t.addEventListener('touchstart',e=>{const p=e.touches[0];sx=p.clientX;sy=p.clientY;on=1},{passive:true});
- t.addEventListener('touchend',e=>{if(!on)return;on=0;const p=e.changedTouches[0],dx=p.clientX-sx,dy=p.clientY-sy;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.2)vGo(dx<0?1:-1)},{passive:true})})();
 $$('.cl,.x').forEach(b=>b.onclick=()=>b.closest('dialog').close());
-addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;if(VW.open&&VM=='view')vGo(e.key=='ArrowLeft'?-1:1)});
+addEventListener('keydown',e=>{if(!VW.open||VM!=='view'||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;
+ const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;if(document.querySelector('dialog[open]:not(#vw)'))return;
+ const k=e.key;if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();rlStep(k==='ArrowLeft'?-1:1);rlSched()}else if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();vGo(k==='ArrowUp'?-1:1);rlSched()}});
+/* a shared link  yoursite/#m=<photo id>  opens that photo straight away */
+let DEEP=0;function openFromHash(){const h=/^#m=([\w-]+)$/.exec(location.hash||'');if(!h)return;
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+ const it=MEM.find(x=>!x.ev&&(String(x.id)===h[1]||pidOf(x)===h[1]));if(!it)return toast('That memory is no longer there.');
+ if(cat!=='ALL')setCat('ALL');openGallery('view',it)}
+function deepLink(){if(DEEP||!/^#m=/.test(location.hash||''))return;DEEP=1;const t=setInterval(()=>{if(gone){clearInterval(t);DEEP=0;openFromHash()}},400)}      // wait for the intro to finish
+addEventListener('hashchange',()=>{if(window.DATA_READY)deepLink()});
+/* ---- staff menu: ONE ⋮ button per message / photo (visible only on the admin / founder link). It opens a small menu: Pin · Block device · Delete.
+   The menu goes away when you tap anywhere else, scroll, press Esc, or move the mouse off it. It lives inside the open gallery window when there is one (a window can only be clicked inside itself). ---- */
+let KM=null,KMB=null,KMT=0,KMOPEN=false;
+const msgItems=m=>{const a=[{icon:'📌',label:isPin(m)?'Unpin message':'Pin to top',run:()=>pinMsg(m,!isPin(m))}];if(m.bn&&!m.badge)a.push({icon:'🚫',label:'Block this device',run:()=>openBan('message',m)});a.push({icon:'🗑️',label:'Delete message',danger:1,run:()=>del('message',m.id)});return a};
+const photoItems=m=>{const a=[];if(m.bn)a.push({icon:'🚫',label:'Block this device',run:()=>openBan('photo',m)});a.push({icon:'🗑️',label:'Delete photo',danger:1,run:()=>del('photo',m.id)});return a};
+const kmKeep=()=>clearTimeout(KMT),kmLeave=()=>{clearTimeout(KMT);KMT=setTimeout(()=>closeKm(),450)};
+function closeKm(focus){clearTimeout(KMT);if(!KM||KM.hidden)return;KM.hidden=true;KMOPEN=false;const b=KMB;KMB=null;if(b){b.setAttribute('aria-expanded','false');if(focus){try{b.focus({preventScroll:true})}catch(e){}}}}
+function openKm(btn,items,byKey){if(KMB===btn&&KMOPEN){closeKm();return}closeKm();
+ if(!KM){KM=el('div','km-menu');KM.setAttribute('role','menu');KM.hidden=true;KM.addEventListener('pointerenter',kmKeep);KM.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')kmLeave()});
+  KM.addEventListener('keydown',e=>{const b=[...KM.querySelectorAll('button')],i=b.indexOf(document.activeElement);
+   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();b[(i+(e.key==='ArrowDown'?1:-1)+b.length)%b.length].focus()}
+   else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeKm(true)}else if(e.key==='Tab')closeKm()})}
+ KM.replaceChildren();items.forEach(it=>{const b=el('button','km-i'+(it.danger?' dng':''));b.type='button';b.setAttribute('role','menuitem');b.append(el('span','km-e',it.icon),el('span','',it.label));b.onclick=ev=>{ev.stopPropagation();closeKm();it.run()};KM.append(b)});
+ (VW.open?VW:document.body).append(KM);KM.hidden=false;KM.style.left='0px';KM.style.top='0px';
+ const r=btn.getBoundingClientRect(),w=KM.offsetWidth,h=KM.offsetHeight,pad=8;let top=r.bottom+6;if(top+h>innerHeight-pad)top=Math.max(pad,r.top-h-6);
+ KM.style.left=Math.round(Math.min(innerWidth-w-pad,Math.max(pad,r.right-w)))+'px';KM.style.top=Math.round(top)+'px';
+ KMB=btn;KMOPEN=true;btn.setAttribute('aria-expanded','true');if(byKey){const f=KM.querySelector('button');if(f)f.focus()}}
+function kebab(kind,m){const b=el('button','km-b');b.type='button';b.title='Staff actions';b.setAttribute('aria-label','Staff actions');b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');b.append(svgOf('dots'));
+ b.onclick=ev=>{ev.stopPropagation();openKm(b,kind=='message'?msgItems(m):photoItems(m),ev.detail===0)};
+ b.addEventListener('pointerenter',kmKeep);b.addEventListener('pointerleave',ev=>{if(ev.pointerType==='mouse'&&KMB===b)kmLeave()});return b}
+document.addEventListener('pointerdown',e=>{if(KMOPEN&&!KM.contains(e.target)&&!(KMB&&KMB.contains(e.target)))closeKm()},true);
+addEventListener('scroll',e=>{if(KMOPEN&&!(KM&&KM.contains(e.target)))closeKm()},{passive:true,capture:true});
+addEventListener('resize',()=>closeKm());addEventListener('keydown',e=>{if(e.key==='Escape'&&KMOPEN)closeKm(true)});
 $('#add').onclick=openAdd;
-$('#af').onsubmit=async e=>{e.preventDefault();const f=$('#pf').files[0];if(!f||!/^image\//.test(f.type))return toast('Choose an image.');
+/* a post can hold up to 10 pictures (a carousel): the first one creates the post, the others are added one request at a time, so no single request is heavy and nothing blocks the likes */
+const MAX_PICS=10,PF_HINT='You can pick up to 10 photos at once: they become a swipeable carousel.';
+$('#pf').onchange=()=>{const n=$('#pf').files.length;$('#pfn').textContent=n>MAX_PICS?'Only the first '+MAX_PICS+' photos will be used.':n>1?n+' photos selected: they will be posted as a carousel.':n==1?'1 photo selected.':PF_HINT};
+$('#af').onsubmit=async e=>{e.preventDefault();const fs=[...$('#pf').files].filter(f=>/^image\//.test(f.type)).slice(0,MAX_PICS);if(!fs.length)return toast('Choose an image.');
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
  let rr=null;
- try{const [img,bc]=await Promise.all([shrink(f),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
+ try{const [img,bc]=await Promise.all([shrink(fs[0]),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
   if(bc&&bc.photo){showBan(bc.photo);return}
   const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await api({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},{timeout:60000});
   if(!r.ok&&!r.demo){bad=r.error;throw 0}
-  const mine={};
-  MEM.unshift(r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:mine.uid||'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img});
-  setCat('ALL');$('#am').close();e.target.reset();
-  toast(r.demo?'Added (demo: connect the Backend link to keep it).':'✅ تم رفع الصورة بنجاح',10000)}catch(x){if(bad=='banned'&&rr)showBan(rr);else toast(bad?errText(bad):'Could not send. Try again.')}
+  const imgs=[img];let miss=0,why='';
+  for(let k=1;k<fs.length;k++){btxt.textContent='UPLOADING '+(k+1)+'/'+fs.length+'…';
+   let im;try{im=await shrink(fs[k])}catch(x){miss++;continue}
+   const x=r.item?await api({action:'photoadd',id:r.item.id,image:im},{timeout:60000}):{ok:0,demo:1};
+   if(x.ok||x.demo)imgs.push(im);else{why=x.error;miss+=fs.length-k;break}}
+  const it=r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img};
+  if(imgs.length>1)it.pics=imgs;MEM.unshift(it);
+  setCat('ALL');$('#am').close();e.target.reset();$('#pf').onchange();
+  toast(miss?'Posted with '+imgs.length+' of '+fs.length+' photos.'+(why?' '+errText(why):''):r.demo?'Added (demo: connect the Backend link to keep it).':'✅ تم رفع الصورة بنجاح',10000)}catch(x){if(bad=='banned'&&rr)showBan(rr);else toast(bad?errText(bad):'Could not send. Try again.')}
  finally{btn.disabled=false;spin.hidden=true;btxt.textContent='SUBMIT MEMORY'}};
 
 /* ---- frame tool: drag/pinch your photo to fit under the class frame, download as one PNG ---- */
@@ -337,11 +434,10 @@ const msgById=id=>MSG.find(x=>String(x.id)===String(id));
 let REPLIES={};                                          // message id -> how many replies it has (rebuilt on every render)
 const ICO_REPLY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>';
 function icoReply(){const t=document.createElement('template');t.innerHTML=ICO_REPLY;return t.content.firstChild}
-const exc30=s=>{const a=Array.from(String(s||'').replace(/\s+/g,' ').trim());return a.slice(0,30).join('')+(a.length>30?'…':'')};      // first 30 characters of the original (emoji-safe)
 function setReply(r){REPLY=r||null;const b=$('#mreply');if(!b)return;b.hidden=!REPLY;if(REPLY){b.querySelector('.rpbar-n').textContent=REPLY.name;b.querySelector('.rpbar-t').textContent=REPLY.text?'· '+REPLY.text:''}}
 $('#mreplyx').onclick=()=>{setReply(null);try{$('#mt').focus({preventScroll:true})}catch(e){}};      // the ✕ on the "Replying to" bar
 function startReply(m){if(MLOCK&&!ADM)return toast(errText('locked'));if(!m.id)return;
- setReply({id:String(m.id),name:clean(m.name,30)||'Anonymous',text:exc30(m.message)});
+ setReply({id:String(m.id),name:clean(m.name,30)||'Anonymous',text:clean(m.message,240).replace(/\s+/g,' ')});
  try{($('#mn').value?$('#mt'):$('#mn')).focus({preventScroll:true})}catch(e){}                       // inside the tap, so phones open the keyboard
  $('#mf').scrollIntoView({behavior:'smooth',block:'center'})}
 async function revealMsg(id){const k=String(id);      // make sure a note is loaded AND drawn, however old it is (loads older pages until it turns up; false = it really is gone)
@@ -360,9 +456,10 @@ async function goMsg(id){const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"
   top-=to-w.scrollTop;w.scrollTo({top:to,behavior:sm})}                                          // ... and where it will be once the box has scrolled
  scrollBy({top:top+c.offsetHeight/2-innerHeight/2,behavior:sm});
  c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1900)}
-function replyLine(m){const b=el('button','rpl'),n=el('bdi');b.type='button';b.setAttribute('aria-label','Go to the message this replies to');
- n.append(el('b','',clean(m.rname,30)||'Anonymous'));b.append(icoReply(),document.createTextNode(' Reply to '),n);
- if(m.rtext)b.append(document.createTextNode(' · '),el('bdi','',clean(m.rtext,40)));
+function replyLine(m){const b=el('button','rpl'),h=el('span','rpl-h'),n=el('bdi'),o=msgById(m.reply),full=clean(o?o.message:m.rtext,240);      // the WHOLE message being answered (the live original when it is loaded, otherwise the copy saved with the reply)
+ b.type='button';b.setAttribute('aria-label','Go to the message this replies to');
+ n.append(el('b','',clean(m.rname,30)||'Anonymous'));h.append(icoReply(),document.createTextNode(' Reply to '),n);b.append(h);
+ if(full){const t=el('span','rpl-t',full);t.dir='auto';b.append(t)}
  b.onclick=ev=>{ev.stopPropagation();goMsg(m.reply)};return b}
 function rxFoot(c,m){let f=c.querySelector('.mrx');if(!f){f=el('div','mrx');c.append(f)}
  f.replaceChildren();if(!m.id){f.hidden=true;return}
@@ -383,7 +480,7 @@ function toggleRx(c,m){if(!m.id)return;const was=c.classList.contains('rx-open')
  c.classList.toggle('rx-open',!was);c.setAttribute('aria-expanded',String(!was));rxFoot(c,m);
  if(!was&&c.closest('#wall')){const w=$('#wall'),wr=w.getBoundingClientRect(),cr=c.getBoundingClientRect();                       // bring the picker fully into view inside the wall
   if(cr.bottom>wr.bottom-30)w.scrollBy({top:cr.bottom-wr.bottom+34,behavior:'smooth'})}}
-const rxDraw=id=>{const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q),m=msgById(id);if(c&&m)rxFoot(c,m)};
+const rxDraw=id=>{const q='.msg[data-id="'+String(id).replace(/"/g,'')+'"]',c=$('#pinwrap '+q+',#wall '+q),m=msgById(id);if(c&&m)rxFoot(c,m);lkDraw(id)};      // a wall note's chips, and every ♥ counter showing this photo
 const RECHK={};const RXB={},RXD={},RXBASE={};                           // per message: a request is in flight · a newer tap is waiting · the state to go back to if the server refuses
 const RX_NO=['nomsg','emoji','noauth','action'];          // the only answers that mean "this can never work"; anything else (busy, network, server) is retried
 function react(m,key){const id=m.id;if(!id)return;const prev=MINE[id]||'';if(prev===key)return;
@@ -397,7 +494,7 @@ async function syncRx(id){if(RXB[id]){RXD[id]=1;return}RXB[id]=1;
  try{for(let n=0;;){RXD[id]=0;const sent=MINE[id]||'';const r=await api({action:'msgreact',id:String(id),emoji:sent,dev:DEV},{tries:3});
   if(r.ok||r.demo){if(RXD[id]||(MINE[id]||'')!==sent)continue;delete PEND[id];delete RXBASE[id];RXT[id]=Date.now();saveMine();if(r.counts)RX[id]=r.counts;rxDraw(id);return}
   if(RX_NO.indexOf(r.error)>=0){const b=RXBASE[id];if(b){RX[id]=b.c;if(b.m)MINE[id]=b.m;else delete MINE[id]}delete PEND[id];delete RXBASE[id];saveMine();RXD[id]=0;rxDraw(id);console.warn('reaction refused',r);
-   toast(r.error=='nomsg'?'That message is no longer there.':r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction.',ADM?9000:undefined);return}
+   toast(r.error=='nomsg'?'That message / photo is no longer there.':r.error=='action'?'Reactions need the updated backend (Code.gs).':'Could not save your reaction.',ADM?9000:undefined);return}
   if(++n>=6){console.warn('reaction will be retried later',r);return}               // stays in PEND: sent again when the page comes back online / on the next visit
   await sleep(Math.min(30000,1500*n*n))}}
  finally{RXB[id]=0}}
@@ -405,7 +502,7 @@ function flushPend(){Object.keys(PEND).forEach(id=>{if(!RXB[id])syncRx(id)})}
 const sameRx=(a,b)=>{a=a||{};b=b||{};return RXS.every(x=>(a[x[0]]||0)===(b[x[0]]||0))};
 const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},now=Date.now(),hot=id=>(id in PEND)||now-(RXT[id]||0)<3e4;
  /* server totals win, except for a message I tapped in the last 30 s (or whose tap is not confirmed yet): the server may not have folded my tap into its totals, so show it anyway */
- const inWin=new Set(rp.messages.map(m=>String(m.id)));      // notes loaded from older pages keep their own totals
+ const inWin=new Set([...rp.messages,...(rp.photos||[])].map(m=>String(m.id)));      // notes loaded from older pages keep their own totals · photo likes follow exactly the same rules
   new Set([...Object.keys(s),...[...Object.keys(RX),...Object.keys(MINE)].filter(id=>inWin.has(id))]).forEach(id=>{const before=RX[id],k=Object.assign({},s[id]||{});
   if(inWin.has(id)&&MINE[id]&&!hot(id)&&!(k[MINE[id]]>0)&&!RECHK[id]){RECHK[id]=1;setTimeout(()=>{if(MINE[id]&&!RXB[id])syncRx(id)},1500)}      // the server does not list MY reaction (lost on its side?): send it again, once per visit. Harmless if it was only a stale copy: the server keeps one reaction per device
   if(hot(id)){const m=MINE[id]||'',p=PEND[id]||'';if(p&&p!==m&&k[p]>0)k[p]--;if(m&&!(k[m]>0))k[m]=1}
@@ -478,11 +575,7 @@ function addCards(to){const w=$('#wall'),pw=$('#pinwrap');                      
  SORTED.slice(SHOWN,to).forEach((m,k)=>{const i=SHOWN+k,c=msgCard(m,i);c.tabIndex=0;c.setAttribute('role','button');c.setAttribute('aria-label','React to the message from '+clean(m.name,30));c.setAttribute('aria-expanded','false');if(m.id)c.dataset.id=m.id;
   if(msgFirst){c.classList.add('in');c.style.animationDelay=Math.min(i,5)*80+'ms'}
   c.onclick=e=>{if(!e.target.closest('button'))toggleRx(c,m)};c.onkeydown=e=>{if(e.target===c&&(e.key=='Enter'||e.key==' ')){e.preventDefault();toggleRx(c,m)}};rxFoot(c,m);
-  if(m.id){const d=el('button','del','✕');d.type='button';d.setAttribute('aria-label','Delete message');d.onclick=ev=>{ev.stopPropagation();del('message',m.id)};c.append(d);
-   const p=el('button','mbtn mp'+(isPin(m)?' on':''),'📌');p.type='button';                              // admin only (hidden for visitors): pin / unpin
-   p.setAttribute('aria-label',isPin(m)?'Unpin message':'Pin message');p.title=isPin(m)?'Unpin':'Pin to top';
-   p.onclick=ev=>{ev.stopPropagation();pinMsg(m,!isPin(m))};c.append(p);
-   if(m.bn&&!m.badge){const k=el('button','mbtn mb','🚫');k.type='button';k.setAttribute('aria-label','Block this device');k.title='Block this device';k.onclick=ev=>{ev.stopPropagation();openBan('message',m)};c.append(k)}}
+  if(m.id)c.append(kebab('message',m));      // admin / founder only (CSS hides it for visitors): pin · block device · delete, in one ⋮ menu
   (i===0&&isPin(m)?pw:w).append(c)});      // the pinned note lives ABOVE the scrolling box: the rest scrolls below it with the normal gap and never slides under it
  SHOWN=Math.max(SHOWN,to)}
 function msgs(M,where){const all=sortedMsgs(M),w=$('#wall'),pw=$('#pinwrap'),st=w.scrollTop;w.replaceChildren();pw.replaceChildren();
@@ -664,7 +757,7 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({dev:DEV,...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -686,7 +779,8 @@ async function remote(v){const z={messages:[],photos:[],votes:{}};if(!BACKEND.en
 /* last good copy of the home data: the next visit paints from it instantly, then updates in the background */
 const HKEY='aud_home_v2',readHome=()=>{try{const o=JSON.parse(localStorage.getItem(HKEY)||'null');return o&&o.j&&o.j.ok?o.j:null}catch(e){return null}},saveHome=j=>{try{localStorage.setItem(HKEY,JSON.stringify({t:Date.now(),j:j}))}catch(e){}};
 function boardSkeleton(){const g=$('#grid');g.replaceChildren();for(let i=0;i<8;i++){const s=el('div','slot sk'),p=el('div','pol');p.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');p.append(el('div','sk-ph'),el('div','sk-cap'));s.append(el('i','pin'),p);g.append(s)}$('#cnt').textContent='Loading memories…';$('#more').hidden=true;requestAnimationFrame(strings)}
-const vp=p=>({id:p.id,pid:p.id,bn:p.bn?1:0,uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600)});
+const vp=p=>{const more=String(p.more||'').split(',').map(x=>x.trim()).filter(x=>/^[\w-]{10,}$/.test(x));      // extra pictures of a carousel post
+ return{id:p.id,pid:p.id,bn:p.bn?1:0,uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600),pics:more.length?[p.fileId,...more].map(f=>FID(f,1600)):null}};
 function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...MEMORIES.filter(m=>!m.ev));
  ph.sort((a,b)=>String(a.date)<String(b.date)?1:-1);
  const ev=EVENTS.slice().sort((a,b)=>a.d<b.d?-1:1).map(x=>({ev:1,cat:'EVENTS',title:x.t,date:x.d,e:x.e,cap:x.x})),o=[];
@@ -723,7 +817,7 @@ function bdPreview(){const s=bdRead(),u=$('#bduntil'),go=$('#bdgo');
  if(!s.ok){u.textContent='Use whole numbers (0 or more).';go.disabled=true;return}
  if(s.zero){u.textContent='Enter how long (at least 1 hour).';go.disabled=true;return}
  go.disabled=false;u.textContent='Blocked until: '+when(Math.min(addCal(Date.now(),s.Y,s.Mo)+s.D*864e5+s.H*36e5,Date.UTC(9999,11,31)))}
-function openBan(type,m){BD={type,id:m.id};$('#bdwho').textContent='From: '+(type=='photo'?(m.name||'Anonymous')+' · photo':(clean(m.name,30)||'Anonymous')+' · '+exc30(m.message));
+function openBan(type,m){BD={type,id:m.id};$('#bdwho').textContent='From: '+(type=='photo'?(clean(m.name,30)||'Anonymous')+' · 📷 '+(clean(m.cp,140)||'photo'):(clean(m.name,30)||'Anonymous')+' · '+clean(m.message,240).replace(/\s+/g,' '));      // the whole name and the whole text / caption
  $$('input[name=bdw]').forEach(r=>r.checked=r.value==(type=='photo'?'photo':'msg'));['#bdy','#bdmo','#bdh'].forEach(i=>$(i).value=0);$('#bdd').value=1;bdPreview();$('#bd').showModal()}
 $$('#bd input[type=number]').forEach(i=>i.addEventListener('input',bdPreview));$('#bdno').onclick=()=>$('#bd').close();
 $('#bdf').onsubmit=async e=>{e.preventDefault();if(!BD)return;const s=bdRead();if(!s.ok||s.zero)return bdPreview();
@@ -733,14 +827,20 @@ $('#bdf').onsubmit=async e=>{e.preventDefault();if(!BD)return;const s=bdRead();i
  $('#bd').close();toast(r.demo?'Blocked (demo: connect the Backend link).':'Device blocked until '+when(r.until)+'.',6000)};
 /* admin / founder: who is blocked right now, and lift a block early */
 let blT=0;
+const splitLabel=l=>{l=String(l||'');let i=l.indexOf('\n');if(i>=0)return[l.slice(0,i).trim(),l.slice(i+1).trim()];i=l.indexOf(' · ');return i>=0?[l.slice(0,i),l.slice(i+3)]:[l,'']};      // labels are saved as "name \\n text" (older ones as "name · text")
 async function openBans(){const dlg=$('#bl'),ul=$('#bllist'),sub=$('#blsub');ul.replaceChildren();sub.textContent='Loading…';if(!dlg.open)dlg.showModal();
  const r=await api({action:'listbans',key:ADK});if(!r.ok&&!r.demo){sub.textContent=BAN_ERR[r.error]||errText(r.error);return}
  const skew=(r.now||Date.now())-Date.now(),count=()=>{const n=ul.children.length;sub.textContent=n?n+(n==1?' device is':' devices are')+' blocked right now.':'No active blocks.'};
  (r.bans||[]).forEach(b=>{const li=el('li','bl-r'),w=el('div','bl-w'),t=el('span','bl-t'),k=el('button','btn g bl-lift','LIFT');k.type='button';
-  w.append(el('b','',b.label||'Unknown'),el('small','',b.msg&&b.photo?'Messages + photos':b.msg?'Messages':'Photos'));
+  const [nm,tx]=splitLabel(b.label),nb=el('b','',nm||'Unknown');nb.dir='auto';w.append(nb);                          // the WHOLE name, then the WHOLE message / photo caption under it
+  if(tx){const x=el('span','bl-x',tx);x.dir='auto';w.append(x)}
+  w.append(el('small','',b.msg&&b.photo?'Messages + photos':b.msg?'Messages':'Photos'));
   if(b.locked)k.disabled=true;                                                   // same button, just not clickable
   li._tick=()=>{t.textContent=fmtSpan(spanOf(Date.now()+skew,b.until),'en',false)+' left'};li._tick();
-  k.onclick=async()=>{if(k.disabled)return;k.disabled=true;const x=await api({action:'unban',key:ADK,dev:b.dev});if(!x.ok&&!x.demo){k.disabled=false;return toast(BAN_ERR[x.error]||errText(x.error))}li.remove();count();toast('Block lifted.')};
+  k.onclick=async()=>{if(k.disabled)return;k.disabled=true;      // ask first: lifting a block lets that device post again right away
+   const ok=await ask('Lift this block? · رفع الحظر؟',(nm||'Unknown')+(tx?'\n'+tx:'')+'\n\nThis device will be able to post again right away.\nسيتمكن هذا الجهاز من النشر مرة أخرى فورًا.','LIFT BLOCK','CANCEL');
+   if(!ok){k.disabled=false;return}
+   const x=await api({action:'unban',key:ADK,dev:b.dev});if(!x.ok&&!x.demo){k.disabled=false;return toast(BAN_ERR[x.error]||errText(x.error))}li.remove();count();toast('Block lifted.')};
   li.append(w,t,k);ul.append(li)});count();
  clearInterval(blT);blT=setInterval(()=>ul.querySelectorAll('li').forEach(li=>li._tick&&li._tick()),1000)}
 $('#bl').addEventListener('close',()=>clearInterval(blT));$('#blx').onclick=()=>$('#bl').close();$('#banman').onclick=openBans;
@@ -771,7 +871,7 @@ async function adminInit(){const want=location.hash=='#founder'?'founder':locati
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
- const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId]))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.name,m.message,m.date,m.pin||'',m.badge||'',m.reply||'',m.rname||'',m.rtext||'',m.bn||0]),rp.total||0]));
+ const sigP=rp=>h32(JSON.stringify((rp.photos||[]).map(p=>[p.id,p.caption,p.category,p.fileId,p.more||'']))),sigM=rp=>h32(JSON.stringify([(rp.messages||[]).map(m=>[m.id,m.name,m.message,m.date,m.pin||'',m.badge||'',m.reply||'',m.rname||'',m.rtext||'',m.bn||0]),rp.total||0]));
  /* paints only what changed, so the board never flashes or replays its drop-in animation when fresh data arrives after the saved copy */
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
@@ -779,7 +879,7 @@ function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.crea
   mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?withOlder(rp):MESSAGES;msgs(MSG)}
   const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
   const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device
- const show=rp=>{paint(rp);ready=true;window.DATA_READY=1};
+ const show=rp=>{paint(rp);ready=true;window.DATA_READY=1;deepLink()};
  if(!BACKEND.enabled){show({});return}
  if(cur)show(cur);else boardSkeleton();
  let n=0,lastOk=Date.now(),busy=0;

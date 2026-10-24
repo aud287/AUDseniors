@@ -1,4 +1,7 @@
-/* CLASS OF 2026 — backend (Google Apps Script) · v5  "durable reactions"
+/* CLASS OF 2026 — backend (Google Apps Script) · v6  "photo likes + carousel posts"
+   v6 = v5 + (1) likes on photos use the SAME durable reaction pipeline as the wall messages (a photo id is a valid reaction target everywhere an id is checked),
+   (2) a photo post can hold up to 10 pictures (column `more` in Photos, extra pictures are added one request at a time by `photoadd`),
+   (3) a reply keeps the FULL text of the message it answers, (4) the blocked-devices list keeps the FULL name + text/caption.
    Setup: README.md.  Paste this file, keep your own ADMIN_KEY / FOUNDER_KEY, then Deploy > Manage deployments > Edit > New version.
    (Running setup() once is optional: missing tabs are created automatically and old reaction data is converted by itself the first time it is needed.)
 
@@ -19,6 +22,8 @@ const COOLDOWN = 15;                      // seconds between photo/message posts
 const MSG_WINDOW = 200;                   // newest messages sent with the first load (older ones are fetched page by page: nothing is ever hidden)
 const MSG_PAGE = 100;                     // messages per "older notes" page (the page may ask for up to 500 with &n= when it needs them all)
 const PHOTO_WINDOW = 1000;                // newest photos sent with the first load
+const MAX_MORE = 9;                       // extra pictures per photo post (a carousel = the first picture + up to 9 more)
+const ADD_WINDOW = 900000;                // ms after posting during which the same device may still add pictures to its own post
 const REBUILD_MS = 300000;                // public data is re-read from the sheets after this long (a manual edit in the sheet shows up within minutes)
 const RID_TTL = 600;                      // seconds a finished write is remembered by its request id (a retry gets the same answer instead of posting twice)
 const LOCK_WAIT = 25000;                  // ms an ordinary write may wait for its turn
@@ -29,7 +34,7 @@ const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five r
 const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
-  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev'],           // dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
+  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
@@ -178,7 +183,7 @@ function legacyRows() {                                 // every row of the OLD 
 function importLegacy() {                               // old reactions -> MsgState. A (message, device) pair that already has a state row is never touched (the state is newer). Returns how many were imported
   const old = legacyRows(); if (!old.length) return 0;
   const last = {}, order = []; old.forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });   // the last row of a pair is that device's current reaction
-  const st = tab('MsgState'), slr = st.getLastRow(), have = {}, ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
+  const st = tab('MsgState'), slr = st.getLastRow(), have = {}, ok = validIds();
   if (slr > 1) st.getRange(2, 1, slr - 1, 2).getValues().forEach(r => have[String(r[0]) + '|' + String(r[1])] = 1);
   const add = order.filter(k => !have[k]).map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
   if (add.length) { const to = slr + add.length, mx = st.getMaxRows(); if (to > mx) st.insertRowsAfter(mx, Math.max(500, to - mx)); txt(st.getRange(slr + 1, 1, add.length, 4)).setValues(add); }
@@ -200,7 +205,15 @@ function msgOrder() {                                   // ids of every message 
   let pin = ''; if (pc >= 0) { const p = t.getRange(2, pc + 1, lr - 1, 1).getValues(); for (let i = p.length - 1; i >= 0; i--) if (String(p[i][0]) === '1') { pin = ids[i]; break; } }
   return { ids: ids, pin: pin };
 }
-function windowIds(o) { const s = {}; o.ids.slice(-MSG_WINDOW).forEach(i => s[i] = 1); if (o.pin) s[o.pin] = 1; return s; }
+function photoOrder() {                                 // ids of every photo post in sheet order
+  const t = tab('Photos'), lr = t.getLastRow(); if (lr < 2) return [];
+  const c = heads(t).indexOf('id'); if (c < 0) return [];
+  return t.getRange(2, c + 1, lr - 1, 1).getValues().map(r => String(r[0]));
+}
+function validIds(mo, po) {                             // EVERY id that can hold reactions: wall messages AND photo posts. (Anything not in here is treated as "deleted" and its reactions are dropped, so a photo id MUST be listed.)
+  const v = {}; (mo || msgOrder()).ids.forEach(i => v[i] = 1); (po || photoOrder()).forEach(i => v[i] = 1); return v;
+}
+function windowIds(o, po) { const s = {}; o.ids.slice(-MSG_WINDOW).forEach(i => s[i] = 1); if (o.pin) s[o.pin] = 1; (po || []).slice(-PHOTO_WINDOW).forEach(i => s[i] = 1); return s; }
 function tallies(state, valid) {                        // state rows [msg, dev, emoji] -> {msg: {emoji: n}}
   const cnt = {};
   state.forEach(r => { const m = r[0], e = r[2]; if (!e || !valid[m]) return; const c = cnt[m] = cnt[m] || {}; c[e] = (c[e] || 0) + 1; });
@@ -213,8 +226,7 @@ function writeCounts(cnt) {                             // MsgCounts = the total
   if (list.length) { const to = 1 + list.length, mx = t.getMaxRows(); if (to > mx) t.insertRowsAfter(mx, Math.max(500, to - mx)); txt(t.getRange(2, 1, list.length, MSG_COUNT_COLS)).setValues(list); }
 }
 function recount() {                                    // rebuild MsgCounts from the state rows (safe to run any time from the editor: it repairs any drift)
-  const t = tab('MsgState'), lr = t.getLastRow(), valid = {};
-  msgOrder().ids.forEach(i => valid[i] = 1);
+  const t = tab('MsgState'), lr = t.getLastRow(), valid = validIds();
   const st = lr > 1 ? t.getRange(2, 1, lr - 1, 3).getValues().map(r => [String(r[0]), String(r[1]), String(r[2] || '')]) : [];
   writeCounts(tallies(st, valid)); bump();
 }
@@ -233,7 +245,7 @@ function fold() {                                       // CALLER HOLDS THE LOCK
   const inb = tab('MsgInbox'), ilr = inb.getLastRow(); if (ilr < 2) return null;
   const t0 = Date.now();
   const lines = inb.getRange(2, 1, ilr - 1, 1).getValues().map(r => String(r[0]));
-  const mo = msgOrder(), valid = {}; mo.ids.forEach(i => valid[i] = 1);
+  const mo = msgOrder(), po = photoOrder(), valid = validIds(mo, po);
   const st = tab('MsgState'), slr = st.getLastRow();
   const sv = slr > 1 ? st.getRange(2, 1, slr - 1, 3).getValues().map(r => [String(r[0]), String(r[1]), String(r[2] || '')]) : [];
   const idx = new Map(); sv.forEach((r, i) => idx.set(r[0] + '|' + r[1], i));
@@ -253,7 +265,7 @@ function fold() {                                       // CALLER HOLDS THE LOCK
   if (hi >= 0 || add.length) writeCounts(cnt);
   inb.getRange(2, 1, ilr - 1, 1).clearContent();        // only now: if anything above failed the taps stay in the inbox and the next fold applies them again (applying twice changes nothing)
   SpreadsheetApp.flush();
-  mrPut(cnt, windowIds(mo));
+  mrPut(cnt, windowIds(mo, po));
   const c = cache(), dur = Date.now() - t0; c.put('fold_at', String(Date.now() + Math.max(FOLD_GAP, 2 * dur)), 60);     // next fold allowed from here
   return { cnt: cnt, valid: valid };
 }
@@ -295,10 +307,10 @@ function buildPub() {
   const msgs = M.list.slice().reverse(); let pin = pinId && !M.list.some(m => String(m.id) === pinId) ? find('Messages', 'id', pinId) : null;    // a pinned note that is older than the window is still shown
   if (pin) msgs.unshift(pin.o);
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
-  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0 })),
+  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || '') })),
     messages: msgs.map(noDev), votes: votes, oldest: M.list.length ? String(M.list[0].id) : '', more: M.more ? 1 : 0, total: mo.ids.length };      // total = how many notes exist (the page shows it; older ones load as the reader scrolls)
 }
-function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder()) }; }
+function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder(), photoOrder()) }; }
 function loadAll(wantV) {                               // the cached public data, rebuilt if missing / too old. Normal page loads never touch a sheet. -> {v, pub, mr} (pub / mr are strings, or null when wantV already matches)
   const c = cache(), got = c.getAll(['b_pub', 'b_mr']), mp = metaOf(got.b_pub), mm = metaOf(got.b_mr);
   const fresh = mp && mm && Date.now() - mp.at <= REBUILD_MS;
@@ -382,8 +394,7 @@ const ACT = {
     if (d.reply) {                                                                    // a reply is a normal new message + a link to the original; the preview comes from the REAL original, never from what the browser sends
       const f = find('Messages', 'id', String(d.reply).slice(0, 60));
       if (!f) return out({ ok: 0, error: 'gone' });                                   // the original was deleted meanwhile
-      const a = Array.from(String(f.o.message || '').replace(/\s+/g, ' ').trim());
-      it.reply = String(f.o.id); it.rname = clean(f.o.name, 30); it.rtext = a.slice(0, 30).join('') + (a.length > 30 ? '…' : '');
+      it.reply = String(f.o.id); it.rname = clean(f.o.name, 30); it.rtext = clean(String(f.o.message || '').replace(/\s+/g, ' '), 240);      // the FULL original (messages are at most 240 characters), so the reply can show all of it
     }
     if (!r && limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     put('Messages', it);
@@ -398,10 +409,26 @@ const ACT = {
     const bytes = Utilities.base64Decode(img.split(',')[1]);
     const f = folder().createFile(Utilities.newBlob(bytes, 'image/jpeg', id + '.jpg'));
     f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev };
+    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '' };
     put('Photos', it);
-    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: 1 }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
+    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: 1, more: '' }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
     return out({ ok: 1, item: noDev(it) });
+  },
+  photoadd(d, now) {                                       // the SAME visitor adds one more picture to the post they just made (a carousel). One picture per request, so the global lock is never held for long
+    const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
+    const dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
+    const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');
+    const pid = clean(d.id, 40), f = pid ? find('Photos', 'id', pid) : null; if (!f) return out({ ok: 0, error: 'gone' });
+    if (devId(f.o.dev) !== dev) return out({ ok: 0, error: 'noauth' });                  // only the device that made the post can add to it
+    if (Date.now() - Date.parse(String(f.o.date)) > ADD_WINDOW) return out({ ok: 0, error: 'late' });
+    const more = String(f.o.more || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (more.length >= MAX_MORE) return out({ ok: 0, error: 'many' });
+    const file = folder().createFile(Utilities.newBlob(Utilities.base64Decode(img.split(',')[1]), 'image/jpeg', pid + '_' + (more.length + 2) + '.jpg'));
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    more.push(file.getId()); const joined = more.join(',');
+    setRow('Photos', f.row, { more: joined });
+    patch(x => { const p = x.photos.find(q => String(q.id) === pid); if (p) p.more = joined; });
+    return out({ ok: 1, fileId: file.getId(), n: more.length + 1 });
   },
   vote(d, now) {
     const poll = Number(d.poll) || 0, option = Number(d.option) || 0; put('Votes', { poll: poll, option: option, date: now });
@@ -428,8 +455,9 @@ const ACT = {
     const Y = n('y'), Mo = n('mo'), D = n('d'), H = n('h');
     if ([Y, Mo, D, H].some(isNaN) || Y + Mo + D + H === 0) return out({ ok: 0, error: 'span' });
     let f, label = '';
-    if (d.type === 'photo') { f = find('Photos', 'id', String(d.id)); if (f) label = clean(f.o.name, 30) + ' · photo'; }
-    else { f = find('Messages', 'id', String(d.id)); if (f) { const a = Array.from(String(f.o.message || '').replace(/\s+/g, ' ').trim()); label = clean(f.o.name, 30) + ' · ' + a.slice(0, 30).join('') + (a.length > 30 ? '…' : ''); } }
+    const one = (v, n) => clean(String(v || '').replace(/\s+/g, ' '), n);                      // the label keeps the WHOLE name and the WHOLE text / caption: "name \n text"
+    if (d.type === 'photo') { f = find('Photos', 'id', String(d.id)); if (f) label = one(f.o.name, 30) + '\n📷 ' + (one(f.o.caption, 140) || 'Photo'); }
+    else { f = find('Messages', 'id', String(d.id)); if (f) label = one(f.o.name, 30) + '\n' + one(f.o.message, 240); }
     if (!f) return out({ ok: 0, error: 'gone' });
     const dev = devId(f.o.dev); if (!dev) return out({ ok: 0, error: 'nodev' });      // posted before devices were recorded (or by staff)
     const now = Date.now(), until = Math.min(addSpan(now, Y, Mo, D, H), Date.UTC(9999, 11, 31));
@@ -473,8 +501,10 @@ const ACT = {
     const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
     const photo = d.type === 'photo', id = String(d.id);
     const gone = dropRows(photo ? 'Photos' : 'Messages', x => String(x.id) === id);
-    if (photo) gone.forEach(x => trashFile(x.fileId));
-    else if (gone.length) {
+    if (photo) {
+      gone.forEach(x => { trashFile(x.fileId); String(x.more || '').split(',').forEach(f => trashFile(f.trim())); });      // every picture of a carousel post
+      if (gone.length) { dropRows('MsgState', x => String(x.msg) === id); recount(); }                                      // its likes go with it
+    } else if (gone.length) {
       dropRows('MsgState', x => String(x.msg) === id);   // its reactions go with it ...
       recount();                                             // ... and the totals are rebuilt (taps still waiting for it in the inbox are dropped by the next fold)
     }
@@ -485,8 +515,8 @@ const ACT = {
 /* ---------- maintenance: run these from the Apps Script editor (select the function, press Run, then View > Logs) ---------- */
 function diagnose() {                                   // read-only: shows what the reactions look like inside the sheet, and the last server error
   const L = []; const say = s => { L.push(s); Logger.log(s); };
-  const ids = msgOrder().ids, idSet = {}; ids.forEach(i => idSet[i] = 1);
-  say('Messages: ' + ids.length + ' rows');
+  const ids = msgOrder().ids, pids = photoOrder(), idSet = validIds();
+  say('Messages: ' + ids.length + ' rows · Photo posts: ' + pids.length + ' rows (both can hold reactions / likes)');
   const sh = n => book().getSheetByName(n), rowsOf = t => t ? Math.max(0, t.getLastRow() - 1) : 'MISSING';
   const mrT = sh('MsgState'), cT = sh('MsgCounts'), iT = sh('MsgInbox'), sT = sh('Settings');
   say('Tabs: MsgState=' + rowsOf(mrT) + ' rows, MsgCounts=' + rowsOf(cT) + ' rows, MsgInbox=' + rowsOf(iT) + ' waiting. Old tabs (read only): MsgReactions=' + (sh('MsgReactions') ? rowsOf(sh('MsgReactions')) : 'none') + ', MsgReactionsOld=' + (sh('MsgReactionsOld') ? rowsOf(sh('MsgReactionsOld')) : 'none'));
@@ -514,7 +544,7 @@ function compactState() {                              // MsgState back to ONE r
   const t = tab('MsgState'), lr = t.getLastRow(); if (lr < 2) return 0;
   const v = t.getRange(2, 1, lr - 1, 4).getValues(), last = {}, order = [];
   v.forEach(r => { const k = String(r[0]) + '|' + String(r[1]); if (!(k in last)) order.push(k); last[k] = [String(r[0]), String(r[1]), String(r[2] || ''), String(r[3] || '')]; });
-  const ok = {}; msgOrder().ids.forEach(i => ok[i] = 1);
+  const ok = validIds();
   const keep = order.map(k => last[k]).filter(r => MSG_EMO.indexOf(r[2]) >= 0 && DEV_RE.test(r[1]) && ok[r[0]]);
   t.getRange(2, 1, lr - 1, 4).clearContent();
   if (keep.length) txt(t.getRange(2, 1, keep.length, 4)).setValues(keep);
