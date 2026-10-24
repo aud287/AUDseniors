@@ -145,10 +145,10 @@ function chipsR(){const c=$('#chips'),p=$('#pc');[c,p].forEach(x=>x.replaceChild
  const cs=[...new Set([...G('cats').split(/[,\n]/).map(x=>x.trim().toUpperCase()),...MEM.map(m=>(m.cat||'').toUpperCase())].filter(Boolean))];
  ['ALL',...cs].forEach(t=>{const b=el('button','chip'+(t==cat?' on':''),t);b.type='button';b.dataset.cat=t;b.onclick=()=>setCat(t);c.append(b);if(t!='ALL')p.append(new Option(t,t))})}
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(strings,200)});addEventListener('load',strings);
-/* ---- memories viewer: a GRID of every photo, and a "reels" viewer (one post per screen, flipped sideways; carousel posts; like · share · auto-scroll). Both follow the filter. ----
+/* ---- memories viewer: a GRID of every photo, and a "reels" viewer (one post per screen, flipped vertically (like Instagram Reels); carousel posts; like · share · auto-scroll). Both follow the filter. ----
    Reel DOM is built lazily: one empty box per post, and only the posts near the current one hold images (the rest are emptied again), so a thousand photos stay light. */
 let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false,RLB=false;            // list shown · current index · mode · filter · sort · grid built? · reel built?
-const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=4500;
+const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=2000;
 const ICO={heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
  share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3 3 10.3l6.6 2.6L12.2 20z"/><path d="M9.6 12.9 21.5 3"/></svg>',
  dots:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
@@ -222,10 +222,10 @@ function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=
 const rlFillAround=i=>{for(let k=i-1;k<=i+2;k++)rlItem(k)};
 function rlTrim(i){RLF.forEach(k=>{if(Math.abs(k-i)>5){const s=RL.children[k];if(s){s._f=0;s._sg=null;s.replaceChildren()}RLF.delete(k)}})}      // far-away posts give their pictures back
 function setCur(i){if(i===GI&&RLF.has(i))return;GI=i;rlFillAround(i);rlTrim(i);vCount();rlSched()}
-function rlGo(i,smooth){const n=VALL.length,w=RL.clientWidth;if(!n||!w)return;i=Math.max(0,Math.min(n-1,i));rlFillAround(i);RL.scrollTo({left:i*w,behavior:smooth&&!RM?'smooth':'auto'})}
+function rlGo(i,smooth){const n=VALL.length,h=RL.clientHeight;if(!n||!h)return;i=Math.max(0,Math.min(n-1,i));rlFillAround(i);RL.scrollTo({top:i*h,behavior:smooth&&!RM?'smooth':'auto'})}
 function vGo(d){const n=VALL.length;if(n<2)return;const j=GI+d;if(j<0||j>=n)rlGo((j+n)%n,false);else rlGo(j,true)}      // past the end it wraps around without a long slide
 function rlStep(d){const c=curCar();if(c){const k=c._i+d;if(k>=0&&k<c._n){carTo(c,k,true);return}}vGo(d)}      // keyboard / auto: finish a post's pictures first, then the next post
-let rlTk=0;RL.addEventListener('scroll',()=>{if(rlTk)return;rlTk=requestAnimationFrame(()=>{rlTk=0;const w=RL.clientWidth;if(RLFIX||!VW.open||VM!=='view'||!w||!VALL.length)return;setCur(Math.max(0,Math.min(VALL.length-1,Math.round(RL.scrollLeft/w))))})},{passive:true});
+let rlTk=0;RL.addEventListener('scroll',()=>{if(rlTk)return;rlTk=requestAnimationFrame(()=>{rlTk=0;const h=RL.clientHeight;if(RLFIX||!VW.open||VM!=='view'||!h||!VALL.length)return;setCur(Math.max(0,Math.min(VALL.length-1,Math.round(RL.scrollTop/h))))})},{passive:true});
 /* auto-scroll: every few seconds goes to the next picture / post. It waits while a finger or button is held, while another window is open, and while the page is hidden. */
 function rlSched(){clearTimeout(AT);AT=0;if(!AUTO||HOLD||!VW.open||VM!=='view'||SOLO()||document.hidden||!VALL.length)return;AT=setTimeout(rlTick,AUTO_MS)}
 function rlTick(){AT=0;if(!AUTO||!VW.open||VM!=='view'||document.hidden)return;
@@ -242,7 +242,7 @@ RL.addEventListener('pointerup',e=>{const t=e.target;if(!t.closest||!t.closest('
  if(e.timeStamp-tapT<320&&Math.hypot(e.clientX-tapX,e.clientY-tapY)<40){tapT=0;const s=t.closest('.rl-item'),m=s&&VALL[+s.dataset.i],id=m&&likeId(m);if(!id)return;
   toggleLike(id,true);if(RM)return;const r=s.getBoundingClientRect(),h=el('i','rl-burst');h.append(svgOf('heart'));h.style.left=(e.clientX-r.left)+'px';h.style.top=(e.clientY-r.top)+'px';s.append(h);setTimeout(()=>h.remove(),900)}
  else{tapT=e.timeStamp;tapX=e.clientX;tapY=e.clientY}});
-let rsT=0;addEventListener('resize',()=>{if(!VW.open||VM!=='view'||!RLB)return;RLFIX=1;cancelAnimationFrame(rsT);rsT=requestAnimationFrame(()=>{RL.scrollTo({left:GI*RL.clientWidth,behavior:'auto'});setTimeout(()=>{RLFIX=0},160)})});      // a resize / rotation keeps the same post on screen
+let rsT=0;addEventListener('resize',()=>{if(!VW.open||VM!=='view'||!RLB)return;RLFIX=1;cancelAnimationFrame(rsT);rsT=requestAnimationFrame(()=>{RL.scrollTo({top:GI*RL.clientHeight,behavior:'auto'});setTimeout(()=>{RLFIX=0},160)})});      // a resize / rotation keeps the same post on screen
 function vMode(m){VM=m;const grid=m=='grid';VW.classList.toggle('rl-on',!grid);$('#vwview').hidden=grid;$('#vwgrid').hidden=!grid;
  $('#vwmv').setAttribute('aria-pressed',String(!grid));$('#vwmg').setAttribute('aria-pressed',String(grid));
  if(grid){clearTimeout(AT);closeKm();if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));vCount();
@@ -263,9 +263,10 @@ $('#vwx').onclick=()=>VW.close();$('#vwp').onclick=()=>vGo(-1);$('#vwn').onclick
 $('#vwmv').onclick=()=>vMode('view');$('#vwmg').onclick=()=>vMode('grid');
 $('#vwsort').onchange=e=>{VS=e.target.value;vRefresh()};
 $$('.cl,.x').forEach(b=>b.onclick=()=>b.closest('dialog').close());
+/* ↑ ↓ = previous / next post · ← → = pictures inside a carousel post */
 addEventListener('keydown',e=>{if(!VW.open||VM!=='view'||e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;
  const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))return;if(document.querySelector('dialog[open]:not(#vw)'))return;
- const k=e.key;if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();rlStep(k==='ArrowLeft'?-1:1);rlSched()}else if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();vGo(k==='ArrowUp'?-1:1);rlSched()}});
+ const k=e.key;if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();const c=curCar(),d=k==='ArrowLeft'?-1:1;if(c)carTo(c,c._i+d,true);rlSched()}else if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();vGo(k==='ArrowUp'?-1:1);rlSched()}});
 /* a shared link  yoursite/#m=<photo id>  opens that photo straight away */
 let DEEP=0;function openFromHash(){const h=/^#m=([\w-]+)$/.exec(location.hash||'');if(!h)return;
  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}

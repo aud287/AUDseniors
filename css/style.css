@@ -1239,9 +1239,9 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 
 /* ---- reels: one post per screen, flipped sideways; black bars around any picture that does not fill the screen ---- */
 .rl-wrap{position:relative;flex:1;min-height:0;display:flex;border-radius:16px;overflow:hidden;background:#000}
-.rl{flex:1;min-width:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;outline:none}
+.rl{flex:1;min-width:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;overscroll-behavior:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;outline:none}
 .rl::-webkit-scrollbar,.rl-car::-webkit-scrollbar{display:none}
-.rl-item{position:relative;flex:0 0 100%;width:100%;height:100%;overflow:hidden;background:#000;scroll-snap-align:start;scroll-snap-stop:always;contain:layout paint}
+.rl-item{position:relative;flex:0 0 100%;width:100%;height:100%;min-height:100%;overflow:hidden;background:#000;scroll-snap-align:start;scroll-snap-stop:always;contain:layout paint}
 .rl-media{position:absolute;inset:0;display:grid;place-items:center;background:#000;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .rl-img{width:100%;height:100%;object-fit:contain;display:block;animation:vwin .35s var(--e) both}
 .rl-media>.em.rl-img,.rl-slide>.em.rl-img{display:grid;place-items:center;width:min(70vw,340px);height:auto;aspect-ratio:1;font-size:96px;border-radius:16px}
@@ -1284,9 +1284,10 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 .rl-burst svg{width:100%;height:100%;filter:drop-shadow(0 6px 16px #0008)}.rl-burst svg path{fill:#ff3b5c}
 @keyframes burst{0%{opacity:0;transform:scale(.3)}25%{opacity:1;transform:scale(1.15)}60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:translateY(-30px)}}
 .rl-empty{position:absolute;inset:0;display:grid;place-items:center;margin:0;color:#fbf4e9;opacity:.8;font-weight:600}
-.vw-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:4;width:46px;height:46px;border-radius:50%;background:#ffffff26;border:1px solid #ffffff30;color:#fff;font-size:30px;line-height:1;display:grid;place-items:center;padding-bottom:3px;transition:background .25s}
+.vw-nav{position:absolute;right:10px;z-index:4;width:46px;height:46px;border-radius:50%;background:#ffffff26;border:1px solid #ffffff30;color:#fff;font-size:30px;line-height:1;display:grid;place-items:center;transition:background .25s}
 .vw-nav:hover{background:#ffffff44}
-.vw-p{left:8px}.vw-n{right:8px}
+.vw-nav svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.vw-p{top:calc(50% - 52px)}.vw-n{top:calc(50% + 6px)}      /* ▲ ▼ stacked on the right edge */
 @media(max-width:700px),(pointer:coarse){.vw-nav{display:none}}
 
 /* ---- grid: square tiles; category tag top-left, ♥ count bottom-left (a stack mark bottom-right = carousel post) ---- */
