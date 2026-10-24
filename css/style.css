@@ -1257,14 +1257,24 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
 .rl-seg{position:absolute;top:10px;left:12px;right:12px;display:flex;gap:4px;pointer-events:none}
 .rl-seg i{flex:1;height:3px;border-radius:3px;background:#ffffff4d}
 .rl-seg i.dn{background:#fff}.rl-seg i.on{background:var(--gold)}
-.rl-tag{position:absolute;top:12px;left:12px;max-width:62%;padding:4px 11px;border-radius:99px;background:var(--wine);color:#fff;font:700 10.5px 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 3px 10px #0006}
-.rl-ui.car .rl-tag{top:24px}
+.rl-tags{position:absolute;top:12px;left:12px;max-width:calc(100% - 24px);display:flex;align-items:center;gap:6px}
+.rl-ui.car .rl-tags{top:24px}
+.rl-tag{min-width:0;max-width:62vw;padding:6px 12px;border:1px solid transparent;border-radius:99px;background:var(--wine);color:#fff;font:700 10.5px/1.1 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 10px #0006;cursor:pointer;transition:background .2s,transform .2s,border-color .2s}
+button.rl-tag:hover{background:#8f2a44;transform:translateY(-1px)}
+.rl-tag.on{border-color:var(--gold)}                       /* the category currently being shown */
+.rl-tag.static{cursor:default;pointer-events:none}
+.rl-all{flex:none;padding:6px 12px;border:1px solid #ffffff59;border-radius:99px;background:#00000073;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:#fff;font:700 10.5px/1.1 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 3px 10px #0006;animation:allIn .28s var(--e) both;transition:background .2s,color .2s,border-color .2s}
+.rl-all:hover{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+.rl-tag:focus-visible,.rl-all:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@keyframes allIn{from{opacity:0;transform:translateX(-6px) scale(.9)}to{opacity:1;transform:none}}
 .rl-cb{display:none;position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;background:#0000006e;color:#fff;font-size:22px;line-height:1;place-items:center;padding-bottom:2px;transition:background .2s}
 .rl-cp{left:8px}.rl-cn{right:8px}
 @media(hover:hover) and (pointer:fine){.rl-cb{display:grid}.rl-cb:hover{background:#000000b0}}
 .rl-info{position:absolute;left:84px;right:14px;bottom:16px;display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;color:#fff;text-align:right}      /* name + caption on the RIGHT, whatever the language */
 .rl-who{display:flex;flex-direction:row-reverse;align-items:center;justify-content:flex-start;gap:9px;min-width:0}      /* avatar farthest right, then the name, then the date */
 .rl-av{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:800 15px 'DM Sans',var(--ar),sans-serif;color:#fff;border:2px solid #ffffffcc}
+.rl-av.logo{background:#fbf4e9;border-color:var(--gold);overflow:hidden}      /* post by the admin / founder: the class logo */
+.rl-av.logo img{display:block;width:100%;height:100%;object-fit:contain;padding:2px}
 .rl-nm{min-width:0;text-align:right;font:800 15px/1.2 'DM Sans',var(--ar),sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 6px #000a}
 .rl-dt{flex:none;direction:ltr;font:600 12px 'DM Sans',sans-serif;opacity:.78;white-space:nowrap}
 .rl-dt:after{content:"·";margin-left:8px}
@@ -1300,7 +1310,7 @@ dialog.vw.rl-on .vw-fl{display:none}      /* the reels view is full-screen: filt
  .rl-info{left:auto;right:16px;width:calc(var(--gr) - 32px);bottom:20px}
  .rl-act{left:16px;bottom:20px}
  .rl-seg{left:calc(var(--gl) + 12px);right:calc(var(--gr) + 12px)}
- .rl-tag{left:calc(var(--gl) + 12px)}
+ .rl-tags{left:calc(var(--gl) + 12px)}
  .rl-cp{left:calc(var(--gl) + 10px)}.rl-cn{right:calc(var(--gr) + 10px)}
  .vw-nav{right:calc(var(--gr) + 12px)}
 }
@@ -1458,3 +1468,18 @@ dialog.vw.solo .vw-fl,dialog.vw.solo .vw-modes,dialog.vw.solo .vw-auto,dialog.vw
 .msg .mt a{color:var(--bur,#7a1f2b);text-decoration:underline;word-break:break-all;cursor:pointer}
 .msg .mt a:hover{opacity:.8}
 
+/* ===================== CINEMATIC DARK LIGHTING (photo viewer) =====================
+   ON / OFF: js/config.js -> cinematic: "on" | "off"   (JS only adds / removes the class .cine on the viewer; delete this block to remove the look for good)
+   A dark vignette, a warm key light (top-left), a cool fill light (bottom-right), darker top / bottom bands and a slightly deeper, more contrasty picture. */
+dialog.vw.cine .rl-media img.rl-img{filter:brightness(.92) contrast(1.1) saturate(1.06)}
+dialog.vw.cine .rl-item::before{content:"";position:absolute;z-index:1;inset:0 var(--gr,0px) 0 var(--gl,0px);pointer-events:none;
+ background:
+  radial-gradient(120% 92% at 50% 44%,transparent 36%,rgba(0,0,0,.52) 72%,rgba(0,0,0,.9) 100%),
+  radial-gradient(60% 44% at 20% 10%,rgba(255,176,96,.17),transparent 70%),
+  radial-gradient(62% 50% at 86% 94%,rgba(40,112,152,.17),transparent 70%),
+  linear-gradient(180deg,rgba(0,0,0,.5),transparent 20%,transparent 56%,rgba(0,0,0,.62));
+ animation:cineIn 1.2s ease both}
+dialog.vw.cine .rl-shade{z-index:1}
+dialog.vw.cine .rl-ui{z-index:2}
+@keyframes cineIn{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){dialog.vw.cine .rl-item::before{animation:none}.rl-all{animation:none}}

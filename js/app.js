@@ -149,6 +149,8 @@ let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(strings,200
    Reel DOM is built lazily: one empty box per post, and only the posts near the current one hold images (the rest are emptied again), so a thousand photos stay light. */
 let VALL=[],GI=0,VM='view',VC='ALL',VS='new',VG=false,RLB=false;            // list shown · current index · mode · filter · sort · grid built? · reel built?
 const VW=$('#vw'),RL=$('#rl'),vNorm=m=>(m.cat||'').toUpperCase(),SOLO=()=>VW.classList.contains('solo'),AUTO_MS=2000;
+/* cinematic dark lighting on the photo viewer: ON by default. Turn it off with  cinematic: "off"  in js/config.js (CSS is under "CINEMATIC" in style.css) */
+const CINE=!/^(off|false|no|0)$/i.test(G('cinematic'));VW.classList.toggle('cine',CINE);
 const ICO={heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
  share:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5"/><path d="m7.5 7.5 4.5-4.5 4.5 4.5"/><path d="M5 12.5V18a2.5 2.5 0 0 0 2.5 2.5h9A2.5 2.5 0 0 0 19 18v-5.5"/></svg>',
  dots:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
@@ -201,14 +203,17 @@ function carFill(car,k){for(let j=k-1;j<=k+1;j++){const sl=car.children[j];if(!s
 function carSeg(car){const sg=car._it&&car._it._sg;if(sg)[...sg.children].forEach((x,k)=>{x.className=k<car._i?'dn':k==car._i?'on':''})}
 function carTo(car,k,smooth){k=Math.max(0,Math.min(car._n-1,k));carFill(car,k);car.scrollTo({left:k*car.clientWidth,behavior:smooth&&!RM?'smooth':'auto'})}
 const curCar=()=>{const s=RL.children[GI];return s&&s.querySelector('.rl-car')};
+/* a post made from the #admin / #founder link: the round avatar is the class logo (same image files as the message badges: founderBadge / teamBadge in config.js, else the class logo) */
+function staffAv(k){const d=BADGES[k],u=DR(G(d.cfg),1),use=safe(u)?u:CONFIG.logo,a=el('span','rl-av logo');a.title=d.label;
+ if(ok(use)){const i=new Image();i.src=use;i.alt=d.label;i.decoding='async';a.append(i)}else a.append('✓');return a}
 function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=1;RLF.add(i);
  const media=el('div','rl-media'),ui=el('div','rl-ui'),P=m.ev?[]:picsOf(m);let car=null;
  if(m.ev)media.append(ic(m.e||'🎓','rl-em'));else if(P.length>1){car=rlCar(m,P,s);media.append(car)}else media.append(rlImg(m,P[0],media));
  if(car){ui.classList.add('car');const sg=el('div','rl-seg');for(let k=0;k<P.length;k++)sg.append(el('i',k?'':'on'));s._sg=sg;ui.append(sg);
   [['rl-cb rl-cp','‹','Previous picture',-1],['rl-cb rl-cn','›','Next picture',1]].forEach(([c,t,l,d])=>{const b=el('button',c,t);b.type='button';b.setAttribute('aria-label',l);b.onclick=ev=>{ev.stopPropagation();carTo(car,car._i+d,true)};ui.append(b)})}
- if(m.cat)ui.append(el('span','rl-tag',m.cat));
- const info=el('div','rl-info'),who=el('div','rl-who'),nm=m.ev?(m.title||''):(clean(m.name,30)||CONFIG.className||'Memory'),av=el('span','rl-av',m.ev?'🎓':(Array.from(nm)[0]||'?').toUpperCase()),hue=parseInt(h32(nm),36)%360;
- av.style.background='linear-gradient(135deg,hsl('+hue+' 62% 44%),hsl('+(hue+40)%360+' 66% 28%))';
+ if(m.cat)ui.append(rlTags(m));
+ const info=el('div','rl-info'),who=el('div','rl-who'),nm=m.ev?(m.title||''):(clean(m.name,30)||CONFIG.className||'Memory'),sb=!m.ev&&(m.badge==='founder'||m.badge==='team')?m.badge:'',av=sb?staffAv(sb):el('span','rl-av',m.ev?'🎓':(Array.from(nm)[0]||'?').toUpperCase()),hue=parseInt(h32(nm),36)%360;
+ if(!sb)av.style.background='linear-gradient(135deg,hsl('+hue+' 62% 44%),hsl('+(hue+40)%360+' 66% 28%))';
  const nb=el('b','rl-nm',nm);nb.dir='auto';who.append(av,nb);if(m.date)who.append(el('time','rl-dt',fmt(m.date)));info.append(who);
  const tx=m.ev?(m.cap||''):(m.cp||'');
  if(tx){const cp=el('p','rl-cap',tx),more=el('button','rl-more','more');cp.dir='auto';more.type='button';more.hidden=true;
@@ -219,6 +224,14 @@ function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=
  if(!m.ev&&!SOLO()&&(m.id||m.pid)){const b=el('button','rl-sh');b.type='button';b.setAttribute('aria-label','Share');b.append(svgOf('share'),el('span','n','Share'));b.onclick=ev=>{ev.stopPropagation();shareMem(m)};act.append(b)}
  if(m.id)act.append(kebab('photo',m));
  ui.append(info,act);s.append(media,el('div','rl-shade'),ui)}
+/* category tag (top-left of every post): tap it -> the viewer shows only that category. While a category is active an ALL button appears beside it to show everything again.
+   It only changes the viewer's own filter (VC); the board behind keeps its filter. In a single shared photo (solo) the tag stays a plain label. */
+function rlTags(m){const box=el('div','rl-tags'),c=vNorm(m);
+ if(SOLO()){box.append(el('span','rl-tag static',m.cat));return box}
+ const t=el('button','rl-tag'+(VC==c?' on':''),m.cat);t.type='button';t.setAttribute('aria-pressed',String(VC==c));t.setAttribute('aria-label',VC==c?m.cat+' (showing only this category)':'Show only '+m.cat);
+ t.onclick=ev=>{ev.stopPropagation();if(VC==c)return;VC=c;vRefresh()};box.append(t);
+ if(VC!='ALL'){const a=el('button','rl-all','ALL');a.type='button';a.setAttribute('aria-label','Show all photos');a.onclick=ev=>{ev.stopPropagation();VC='ALL';vRefresh()};box.append(a)}
+ return box}
 const rlFillAround=i=>{for(let k=i-1;k<=i+2;k++)rlItem(k)};
 function rlTrim(i){RLF.forEach(k=>{if(Math.abs(k-i)>5){const s=RL.children[k];if(s){s._f=0;s._sg=null;s.replaceChildren()}RLF.delete(k)}})}      // far-away posts give their pictures back
 function setCur(i){if(i===GI&&RLF.has(i))return;GI=i;rlFillAround(i);rlTrim(i);vCount();rlSched()}
@@ -305,15 +318,15 @@ $('#af').onsubmit=async e=>{e.preventDefault();const fs=[...$('#pf').files].filt
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
  let rr=null;
  try{const [img,bc]=await Promise.all([shrink(fs[0]),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
-  if(bc&&bc.photo){showBan(bc.photo);return}
-  const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await api({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},{timeout:60000});
+  if(bc&&bc.photo&&!ADM){showBan(bc.photo);return}
+  const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await api(Object.assign({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},ADM?{key:ADK}:{}),{timeout:60000});
   if(!r.ok&&!r.demo){bad=r.error;throw 0}
   const imgs=[img];let miss=0,why='';
   for(let k=1;k<fs.length;k++){btxt.textContent='UPLOADING '+(k+1)+'/'+fs.length+'…';
    let im;try{im=await shrink(fs[k])}catch(x){miss++;continue}
-   const x=r.item?await api({action:'photoadd',id:r.item.id,image:im},{timeout:60000}):{ok:0,demo:1};
+   const x=r.item?await api(Object.assign({action:'photoadd',id:r.item.id,image:im},ADM?{key:ADK}:{}),{timeout:60000}):{ok:0,demo:1};
    if(x.ok||x.demo)imgs.push(im);else{why=x.error;miss+=fs.length-k;break}}
-  const it=r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img};
+  const it=r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:'',badge:ADM?(ROLE=='founder'?'founder':'team'):'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img};
   if(imgs.length>1)it.pics=imgs;MEM.unshift(it);
   setCat('ALL');$('#am').close();e.target.reset();$('#pf').onchange();
   toast(miss?'Posted with '+imgs.length+' of '+fs.length+' photos.'+(why?' '+errText(why):''):r.demo?'Added (demo: connect the Backend link to keep it).':'✅ تم رفع الصورة بنجاح',10000)}catch(x){if(bad=='banned'&&rr)showBan(rr);else toast(bad?errText(bad):'Could not send. Try again.')}
@@ -781,7 +794,7 @@ async function remote(v){const z={messages:[],photos:[],votes:{}};if(!BACKEND.en
 const HKEY='aud_home_v2',readHome=()=>{try{const o=JSON.parse(localStorage.getItem(HKEY)||'null');return o&&o.j&&o.j.ok?o.j:null}catch(e){return null}},saveHome=j=>{try{localStorage.setItem(HKEY,JSON.stringify({t:Date.now(),j:j}))}catch(e){}};
 function boardSkeleton(){const g=$('#grid');g.replaceChildren();for(let i=0;i<8;i++){const s=el('div','slot sk'),p=el('div','pol');p.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');p.append(el('div','sk-ph'),el('div','sk-cap'));s.append(el('i','pin'),p);g.append(s)}$('#cnt').textContent='Loading memories…';$('#more').hidden=true;requestAnimationFrame(strings)}
 const vp=p=>{const more=String(p.more||'').split(',').map(x=>x.trim()).filter(x=>/^[\w-]{10,}$/.test(x));      // extra pictures of a carousel post
- return{id:p.id,pid:p.id,bn:p.bn?1:0,uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600),pics:more.length?[p.fileId,...more].map(f=>FID(f,1600)):null}};
+ return{id:p.id,pid:p.id,bn:p.bn?1:0,badge:p.badge||'',uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600),pics:more.length?[p.fileId,...more].map(f=>FID(f,1600)):null}};
 function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...MEMORIES.filter(m=>!m.ev));
  ph.sort((a,b)=>String(a.date)<String(b.date)?1:-1);
  const ev=EVENTS.slice().sort((a,b)=>a.d<b.d?-1:1).map(x=>({ev:1,cat:'EVENTS',title:x.t,date:x.d,e:x.e,cap:x.x})),o=[];

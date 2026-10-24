@@ -34,7 +34,7 @@ const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five r
 const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
-  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
+  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
@@ -307,7 +307,7 @@ function buildPub() {
   const msgs = M.list.slice().reverse(); let pin = pinId && !M.list.some(m => String(m.id) === pinId) ? find('Messages', 'id', pinId) : null;    // a pinned note that is older than the window is still shown
   if (pin) msgs.unshift(pin.o);
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
-  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || '') })),
+  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || '') })),
     messages: msgs.map(noDev), votes: votes, oldest: M.list.length ? String(M.list[0].id) : '', more: M.more ? 1 : 0, total: mo.ids.length };      // total = how many notes exist (the page shows it; older ones load as the reader scrolls)
 }
 function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder(), photoOrder()) }; }
@@ -401,25 +401,34 @@ const ACT = {
     patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(noDev(it)); if (x.total != null) x.total++; if (x.messages.length > MSG_WINDOW + 1) { x.messages = x.messages.slice(0, MSG_WINDOW + 1); x.more = 1; x.oldest = String(x.messages[x.messages.length - 1].id); } });
     return out({ ok: 1, item: noDev(it) });
   },
-  photo(d, now, id) {                                      // visitor photo
+  photo(d, now, id) {                                      // visitor photo, or staff posting from the founder / admin link (their post gets the class-logo avatar)
     const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
-    const name = clean(d.name, 30) || 'Anonymous', dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
-    const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');             // blocked by staff: refused before anything is stored
-    if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    const r = d.key ? role(d.key) : '';
+    if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
+    const name = clean(d.name, 30) || 'Anonymous';
+    let dev = '';
+    if (!r) {                                                                         // visitors only (staff are never blocked or rate-limited):
+      dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
+      const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');             // blocked by staff: refused before anything is stored
+      if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    }
+    const badge = r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '';
     const bytes = Utilities.base64Decode(img.split(',')[1]);
     const f = folder().createFile(Utilities.newBlob(bytes, 'image/jpeg', id + '.jpg'));
     f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '' };
+    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '', badge: badge };
     put('Photos', it);
-    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: 1, more: '' }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
+    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: dev ? 1 : 0, more: '', badge: badge }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
     return out({ ok: 1, item: noDev(it) });
   },
   photoadd(d, now) {                                       // the SAME visitor adds one more picture to the post they just made (a carousel). One picture per request, so the global lock is never held for long
     const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
-    const dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
-    const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');
+    const r = d.key ? role(d.key) : '';
+    if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });
+    let dev = '';
+    if (!r) { dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' }); const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo'); }
     const pid = clean(d.id, 40), f = pid ? find('Photos', 'id', pid) : null; if (!f) return out({ ok: 0, error: 'gone' });
-    if (devId(f.o.dev) !== dev) return out({ ok: 0, error: 'noauth' });                  // only the device that made the post can add to it
+    if (r ? !String(f.o.badge || '') : devId(f.o.dev) !== dev) return out({ ok: 0, error: 'noauth' });                  // only the device that made the post can add to it (staff: only to staff posts)
     if (Date.now() - Date.parse(String(f.o.date)) > ADD_WINDOW) return out({ ok: 0, error: 'late' });
     const more = String(f.o.more || '').split(',').map(x => x.trim()).filter(Boolean);
     if (more.length >= MAX_MORE) return out({ ok: 0, error: 'many' });
