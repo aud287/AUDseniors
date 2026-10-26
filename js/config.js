@@ -20,6 +20,16 @@ window.SITE = {
   teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
   backend: "https://script.google.com/macros/s/AKfycbxxac1s8H7W7_yz2noqiedX4I1vd0hKnt0SJKqe_vPN9iaTvCwvSh0aO9-FtCuvWmIg/exec",                           // Google Apps Script Web app URL (see README.md)
 
+  /* ===== تسجيل الدخول بجوجل (Firebase) — مطلوب فقط لكتابة رسالة أو رفع صورة. تصفح الموقع مفتوح للجميع بدون حساب.
+     املأ القيم من Firebase console > Project settings > Your apps > Web app (الخطوات في FIREBASE_SETUP.md).
+     لو سيبتها فاضية: الموقع يشتغل زي الأول بالظبط (بدون تسجيل دخول). ===== */
+  firebase: {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    appId: ""
+  },
+
   intro: `SENIORS 2026
 5 years. 10 semesters. One dream.
 A thousand memories.

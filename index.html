@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 <link rel="preconnect" href="https://lh3.googleusercontent.com">
-<link rel="stylesheet" href="css/style.css?v=20">
+<link rel="stylesheet" href="css/style.css?v=21">
 <!-- Fonts load without blocking first paint; text still renders (system font) then swaps in -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=DM+Sans:wght@400;600;700&family=Playfair+Display:wght@700;900&family=Playpen+Sans+Arabic:wght@100..800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript>
@@ -86,7 +86,7 @@
 <div class="wall" id="wall" role="region" aria-label="Messages from the class"></div>
 <div class="row"><span id="mcnt" class="cnt"></span><button type="button" class="btn g" id="mmore" hidden>LOAD OLDER NOTES</button></div>
 <div class="mlockbar" id="mlockbar" hidden><span id="mlockst"></span><span class="mlk-b"><button type="button" class="btn g" id="mlock"></button><button type="button" class="btn g" id="banman">🚫 BLOCKED DEVICES</button></span></div>
-<form id="mf" class="glass"><p class="mlocknote" id="mlocknote" role="status" hidden></p><div class="rpbar" id="mreply" hidden><span class="rpbar-l">Replying to</span><b class="rpbar-n" dir="auto"></b><span class="rpbar-t" dir="auto"></span><button type="button" class="rpbar-x" id="mreplyx" aria-label="Cancel reply">✕</button></div><input id="mn" maxlength="30" placeholder="Name / Nickname" aria-label="Name" required="required"/><textarea id="mt" maxlength="240" rows="3" placeholder="Write something for the class…" aria-label="Message" required="required"></textarea><button class="btn">POST MESSAGE</button></form></section>
+<form id="mf" class="glass"><div class="acct" id="macct" hidden></div><p class="mlocknote" id="mlocknote" role="status" hidden></p><div class="rpbar" id="mreply" hidden><span class="rpbar-l">Replying to</span><b class="rpbar-n" dir="auto"></b><span class="rpbar-t" dir="auto"></span><button type="button" class="rpbar-x" id="mreplyx" aria-label="Cancel reply">✕</button></div><input id="mn" maxlength="30" placeholder="Name / Nickname" aria-label="Name" required="required"/><textarea id="mt" maxlength="240" rows="3" placeholder="Write something for the class…" aria-label="Message" required="required"></textarea><button class="btn">POST MESSAGE</button></form></section>
 
 <section id="events" class="rv"><h2>WHAT'S HAPPENING?</h2><p class="sub">Save the dates.</p><div class="evs" id="ev"></div></section>
 <section id="connect" class="rv"><h2>FOLLOW THE FINAL CHAPTER</h2><p class="sub">Stay connected.</p><div class="socs" id="soc"></div></section>
@@ -105,7 +105,7 @@
 <p class="rl-empty" id="vwempty" hidden>No photos in this category yet.</p></div></div>
 <div class="vw-grid" id="vwgrid" hidden aria-label="All photos"></div>
 </div></dialog>
-<dialog id="am"><form id="af" class="dlg"><h3>Add your memory</h3><p class="sub">Your photo appears right away on the memory board. Pick several to post a carousel.</p><p class="am-as" id="amas" hidden></p>
+<dialog id="am"><form id="af" class="dlg"><h3>Add your memory</h3><p class="sub">Your photo appears right away on the memory board. Pick several to post a carousel.</p><p class="am-as" id="amas" hidden></p><div class="acct" id="amacct" hidden></div>
 <input type="file" id="pf" accept="image/*" multiple aria-label="Photos" required="required"/><small class="pf-n" id="pfn">You can pick up to 10 photos at once: they become a swipeable carousel.</small><input id="pn" maxlength="30" placeholder="Your name" aria-label="Your name" required="required"/><select id="pc" aria-label="Category"></select><textarea id="pp" maxlength="140" rows="2" placeholder="Caption" aria-label="Caption"></textarea>
 <button class="btn" id="afbtn" type="submit"><span class="spin" id="afspin" hidden></span><span id="afbtxt">SUBMIT MEMORY</span></button> <button type="button" class="btn g x">CANCEL</button></form></dialog>
 
@@ -140,8 +140,9 @@
 <ul class="bl-list" id="bllist"></ul>
 <div class="sh-a"><button class="btn g" type="button" id="blx">CLOSE</button></div>
 </div></dialog>
-<script src="js/config.js?v=20"></script>
-<script src="js/app.js?v=22"></script>
+<script src="js/config.js?v=21"></script>
+<script src="js/auth.js?v=1"></script>
+<script src="js/app.js?v=23"></script>
 </body>
 </html>
 

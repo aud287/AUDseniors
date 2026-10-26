@@ -1,3 +1,5 @@
+> **Google sign-in (Firebase) for posting messages / photos:** see [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
+
 # CLASS OF 2026 — موقع التخرج (GitHub Pages)
 
 ## 1) الرفع على GitHub
