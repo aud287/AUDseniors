@@ -1,6 +1,4 @@
-/* CLASS OF 2026 — backend (Google Apps Script) · v7  "Google sign-in for posting"
-   v7 = v6 + messages / photos need a Google (Firebase) account when FIREBASE_PROJECT_ID + FIREBASE_API_KEY are set (empty = exactly as v6). The account (email, name, uid) is stored in the sheet and never sent to visitors. See FIREBASE_SETUP.md.
-   v6 was:
+/* CLASS OF 2026 — backend (Google Apps Script) · v6  "photo likes + carousel posts"
    v6 = v5 + (1) likes on photos use the SAME durable reaction pipeline as the wall messages (a photo id is a valid reaction target everywhere an id is checked),
    (2) a photo post can hold up to 10 pictures (column `more` in Photos, extra pictures are added one request at a time by `photoadd`),
    (3) a reply keeps the FULL text of the message it answers, (4) the blocked-devices list keeps the FULL name + text/caption.
@@ -18,12 +16,6 @@
 const ADMIN_KEY = 'aud287**';           // the graduation team's secret (yoursite/#admin).   Better: put it in Project Settings > Script properties as ADMIN_KEY and leave this file without secrets
 const FOUNDER_KEY = 'Bntawakl2030**';   // the FOUNDER's secret (yoursite/#founder). Must differ from ADMIN_KEY. Same: Script property FOUNDER_KEY overrides this value
 const SHEET_ID = '1tJ_KcZX9P7Od9zWN0_APuiSqGRlP2mwnhnw7LMR_mCo';
-/* ---- Google sign-in (Firebase). Needed ONLY to post a message / a photo; reading the site needs nothing.
-   Fill both values from Firebase console > Project settings (see FIREBASE_SETUP.md). While FIREBASE_PROJECT_ID or FIREBASE_API_KEY is empty the backend behaves exactly as before (no login required).
-   Better: put them in Project Settings > Script properties (FIREBASE_PROJECT_ID, FIREBASE_API_KEY, SITE_ORIGIN): a Script property wins over the value written here. */
-const FIREBASE_PROJECT_ID = '';           // e.g. 'aud-seniors-2026'
-const FIREBASE_API_KEY = '';              // the Web API key of the Firebase web app (it is public by design)
-const SITE_ORIGIN = '';                   // optional, e.g. 'https://yourname.github.io' : only needed if you restricted the API key by "HTTP referrers" in Google Cloud
 const FOLDER = 'Class2026 Photos';        // Drive folder (created automatically)
 const MAX_B64 = 4000000;                  // max photo size (base64 chars)
 const COOLDOWN = 15;                      // seconds between photo/message posts from the same visitor
@@ -41,8 +33,8 @@ const CHUNK = 30000;                      // cache chunk size in characters (a c
 const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
 const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev', 'email', 'gname', 'guid'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
-  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge', 'email', 'gname', 'guid'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
+  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
+  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
@@ -134,7 +126,7 @@ function adminState(k) {                                 // 'ok' (admin OR found
 function lockOn() { const f = find('Settings', 'key', 'msgLock'); return !!f && String(f.o.value) === '1'; }          // are visitor messages paused?
 const DEV_RE = /^[a-z0-9]{6,32}$/i;
 function devId(v) { v = String(v || ''); return DEV_RE.test(v) ? v : ''; }                                // the id a browser keeps for itself (anonymous, random)
-function noDev(o) { const x = Object.assign({}, o); x.bn = devId(o.dev) ? 1 : 0; delete x.dev; delete x.email; delete x.gname; delete x.guid; return x; }   // the Google account (email / name / uid) stays in the sheet: visitors never get it   // what visitors get to see: never the device id, only "can staff block this one?"
+function noDev(o) { const x = Object.assign({}, o); x.bn = devId(o.dev) ? 1 : 0; delete x.dev; return x; }   // what visitors get to see: never the device id, only "can staff block this one?"
 function banOf(dev, what) {                              // the active block that stops this device from posting `what` ('msg' | 'photo'), or null
   const f = dev ? find('Bans', 'dev', dev) : null; if (!f) return null;
   const o = f.o, until = Number(o.until);
@@ -150,47 +142,6 @@ function addSpan(t0, Y, Mo, D, H) {                      // calendar years + mon
   return d.getTime() + D * 864e5 + H * 36e5;
 }
 function setLock(on) { const f = find('Settings', 'key', 'msgLock'), v = on ? '1' : '0'; if (f) setRow('Settings', f.row, { value: v }); else put('Settings', { key: 'msgLock', value: v }); }
-
-/* ---------- Google sign-in: who is posting? ----------
-   The page sends the Firebase ID token with every message / photo. It is checked here (outside the lock) and the account is written to the sheet (email, gname, guid).
-   Staff (a valid admin / founder key) never need a Google account. */
-let USER = null;                                         // set by doPost for the current request only: {uid, email, name}
-function loginOn() { return !!(secret('FIREBASE_PROJECT_ID', FIREBASE_PROJECT_ID) && secret('FIREBASE_API_KEY', FIREBASE_API_KEY)); }
-const NEEDS_LOGIN = { message: 1, photo: 1, photoadd: 1 };
-function verifyUser(tok) {                               // -> {uid, email, name} | {err: 'login' | 'authfail' | 'disabled'}
-  tok = String(tok || ''); const parts = tok.split('.');
-  if (tok.length < 100 || tok.length > 6000 || parts.length !== 3) return { err: 'login' };
-  const pid = secret('FIREBASE_PROJECT_ID', FIREBASE_PROJECT_ID), key = secret('FIREBASE_API_KEY', FIREBASE_API_KEY), now = Date.now() / 1000;
-  let pl; try { pl = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1] + '='.repeat((4 - parts[1].length % 4) % 4))).getDataAsString('UTF-8')); } catch (e) { return { err: 'login' }; }
-  if (!pl || pl.aud !== pid || pl.iss !== 'https://securetoken.google.com/' + pid || !pl.sub || !(Number(pl.exp) > now)) return { err: 'login' };   // not a token of THIS Firebase project, or expired
-  const ck = 'tk_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, tok)).slice(0, 30), c = cache(), hit = c.get(ck);
-  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  let res;
-  try {
-    res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + encodeURIComponent(key), {          // Google checks the signature for us
-      method: 'post', contentType: 'application/json', payload: JSON.stringify({ idToken: tok }), muteHttpExceptions: true, headers: SITE_ORIGIN || secret('SITE_ORIGIN', '') ? { Referer: secret('SITE_ORIGIN', SITE_ORIGIN) } : {} });
-  } catch (e) { noteErr('verifyUser(fetch)', e); return { err: 'authfail' }; }
-  const code = res.getResponseCode(); let j = {}; try { j = JSON.parse(res.getContentText()); } catch (e) {}
-  if (code === 200 && j.users && j.users[0]) {
-    const u = j.users[0];
-    if (String(u.localId) !== String(pl.sub) || !u.email) return { err: 'login' };
-    if (u.disabled) return { err: 'disabled' };
-    const user = { uid: String(u.localId), email: clean(String(u.email).toLowerCase(), 120), name: clean(u.displayName, 60) };
-    try { c.put(ck, JSON.stringify(user), Math.max(30, Math.min(300, Math.floor(Number(pl.exp) - now) - 5))); } catch (e) {}
-    return user;
-  }
-  const m = String((j.error && j.error.message) || '');
-  if (/USER_DISABLED/.test(m)) return { err: 'disabled' };
-  if (code === 400 && /INVALID_ID_TOKEN|TOKEN_EXPIRED|USER_NOT_FOUND|CREDENTIAL_TOO_OLD/.test(m)) return { err: 'login' };
-  noteErr('verifyUser', code + ' ' + m);                 // 403 here = the API key is restricted (see FIREBASE_SETUP.md); the visitor just sees "try again"
-  return { err: 'authfail' };
-}
-function authCheck() {                                   // run once from the editor: it asks Google for the permission to call the network and tests the API key
-  if (!loginOn()) { Logger.log('Login is OFF: fill FIREBASE_PROJECT_ID and FIREBASE_API_KEY first.'); return; }
-  const r = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + encodeURIComponent(secret('FIREBASE_API_KEY', FIREBASE_API_KEY)), { method: 'post', contentType: 'application/json', payload: JSON.stringify({ idToken: 'test' }), muteHttpExceptions: true, headers: secret('SITE_ORIGIN', SITE_ORIGIN) ? { Referer: secret('SITE_ORIGIN', SITE_ORIGIN) } : {} });
-  const code = r.getResponseCode(), body = r.getContentText().slice(0, 200);
-  Logger.log(code === 400 && /INVALID_ID_TOKEN/.test(body) ? 'OK: the API key works and the network permission is granted. Login is ON.' : 'PROBLEM (' + code + '): ' + body + '  -> see FIREBASE_SETUP.md, section "Troubleshooting"');
-}
 
 /* ---------- the cache: a handful of FIXED entries, overwritten in place (the cache is limited to 1000 entries in total, so nothing here may grow with traffic) ----------
    A blob is a string stored as  b_<name>  (meta: stamp:chunks:builtAt)  +  b_<name>_0 … b_<name>_n  (each chunk starts with the 8-character stamp, so a reader can tell
@@ -415,8 +366,6 @@ function doPost(e) {
   const rid = /^[a-z0-9]{8,16}$/.test(String(d.rid || '')) ? String(d.rid) : '', c = cache();     // request id: the same write sent twice (a retry) is done only once
   const again = () => { const p = rid ? c.get('rid_' + rid) : null; return p ? raw(p) : null; };
   let hit = again(); if (hit) return hit;
-  USER = null;                                                                   // who is posting (checked BEFORE the lock: the network call must never hold everybody else up)
-  if (NEEDS_LOGIN[d.action] && !d.key && loginOn()) { const u = verifyUser(d.idToken); if (u.err) return out({ ok: 0, error: u.err }); USER = u; }
   const lock = LockService.getScriptLock();
   try { lock.waitLock(LOCK_WAIT); } catch (x) { return out({ ok: 0, error: 'busy' }); }
   try {
@@ -433,11 +382,10 @@ const ACT = {
   message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
     const r = d.key ? role(d.key) : '';
     if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
-    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '', email: USER ? USER.email : '', gname: USER ? USER.name : '', guid: USER ? USER.uid : '' };
+    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '' };
     if (!it.name || !it.message) return out({ ok: 0, error: 'empty' });
     let dev = '';
     if (!r) {                                                                         // visitors only (staff are never blocked):
-      if (loginOn() && !USER) return out({ ok: 0, error: 'login' });                  //   a Google account is required to write
       dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });          //   an old cached page that does not send its device id must reload
       const bn = banOf(dev, 'msg'); if (bn) return banErr(bn, 'msg');                 //   blocked by staff
       if (lockOn()) return out({ ok: 0, error: 'locked' });                           //   closed while the founder has paused messages
@@ -448,7 +396,7 @@ const ACT = {
       if (!f) return out({ ok: 0, error: 'gone' });                                   // the original was deleted meanwhile
       it.reply = String(f.o.id); it.rname = clean(f.o.name, 30); it.rtext = clean(String(f.o.message || '').replace(/\s+/g, ' '), 240);      // the FULL original (messages are at most 240 characters), so the reply can show all of it
     }
-    if (!r && (limited(d.cid, COOLDOWN) || (USER && limited('u' + USER.uid, COOLDOWN)))) return out({ ok: 0, error: 'wait' });
+    if (!r && limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     put('Messages', it);
     patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(noDev(it)); if (x.total != null) x.total++; if (x.messages.length > MSG_WINDOW + 1) { x.messages = x.messages.slice(0, MSG_WINDOW + 1); x.more = 1; x.oldest = String(x.messages[x.messages.length - 1].id); } });
     return out({ ok: 1, item: noDev(it) });
@@ -460,16 +408,15 @@ const ACT = {
     const name = clean(d.name, 30) || 'Anonymous';
     let dev = '';
     if (!r) {                                                                         // visitors only (staff are never blocked or rate-limited):
-      if (loginOn() && !USER) return out({ ok: 0, error: 'login' });                  //   a Google account is required to upload
       dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
       const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');             // blocked by staff: refused before anything is stored
-      if (limited(d.cid, COOLDOWN) || (USER && limited('u' + USER.uid, COOLDOWN))) return out({ ok: 0, error: 'wait' });
+      if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     }
     const badge = r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '';
     const bytes = Utilities.base64Decode(img.split(',')[1]);
     const f = folder().createFile(Utilities.newBlob(bytes, 'image/jpeg', id + '.jpg'));
     f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '', badge: badge, email: USER ? USER.email : '', gname: USER ? USER.name : '', guid: USER ? USER.uid : '' };
+    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '', badge: badge };
     put('Photos', it);
     patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: dev ? 1 : 0, more: '', badge: badge }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
     return out({ ok: 1, item: noDev(it) });
@@ -479,9 +426,9 @@ const ACT = {
     const r = d.key ? role(d.key) : '';
     if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });
     let dev = '';
-    if (!r) { if (loginOn() && !USER) return out({ ok: 0, error: 'login' }); dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' }); const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo'); }
+    if (!r) { dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' }); const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo'); }
     const pid = clean(d.id, 40), f = pid ? find('Photos', 'id', pid) : null; if (!f) return out({ ok: 0, error: 'gone' });
-    if (r ? !String(f.o.badge || '') : (devId(f.o.dev) !== dev && !(USER && String(f.o.guid || '') === USER.uid))) return out({ ok: 0, error: 'noauth' });                  // only the device that made the post can add to it (staff: only to staff posts)
+    if (r ? !String(f.o.badge || '') : devId(f.o.dev) !== dev) return out({ ok: 0, error: 'noauth' });                  // only the device that made the post can add to it (staff: only to staff posts)
     if (Date.now() - Date.parse(String(f.o.date)) > ADD_WINDOW) return out({ ok: 0, error: 'late' });
     const more = String(f.o.more || '').split(',').map(x => x.trim()).filter(Boolean);
     if (more.length >= MAX_MORE) return out({ ok: 0, error: 'many' });
@@ -598,7 +545,6 @@ function diagnose() {                                   // read-only: shows what
   say('MsgCounts matches the reactions? ' + (diff ? 'NO: ' + diff + ' messages differ (run repair())' : 'yes'));
   if (iT && iT.getLastRow() > 1) say('Inbox waiting: ' + (iT.getLastRow() - 1) + ' tap(s). First: ' + iT.getRange(2, 1).getValue());
   const c = cache(), mp = metaOf(c.get('b_pub')), mm = metaOf(c.get('b_mr')); say('Cache: public data ' + (mp ? Math.round((Date.now() - mp.at) / 1000) + ' s old' : 'empty') + ', reaction totals ' + (mm ? 'present' : 'empty'));
-  say('Google login: ' + (loginOn() ? 'ON (project ' + secret('FIREBASE_PROJECT_ID', FIREBASE_PROJECT_ID) + ')' : 'OFF (FIREBASE_PROJECT_ID / FIREBASE_API_KEY are empty: anyone can post, as before)'));
   let le = ''; try { le = PropertiesService.getScriptProperties().getProperty('lastErr') || ''; } catch (e) {}
   say('Last server error: ' + (le || 'none recorded'));
   return L.join('\n');

@@ -318,17 +318,17 @@ $('#add').onclick=openAdd;
 /* a post can hold up to 10 pictures (a carousel): the first one creates the post, the others are added one request at a time, so no single request is heavy and nothing blocks the likes */
 const MAX_PICS=10,PF_HINT='You can pick up to 10 photos at once: they become a swipeable carousel.';
 $('#pf').onchange=()=>{const n=$('#pf').files.length;$('#pfn').textContent=n>MAX_PICS?'Only the first '+MAX_PICS+' photos will be used.':n>1?n+' photos selected: they will be posted as a carousel.':n==1?'1 photo selected.':PF_HINT};
-$('#af').onsubmit=async e=>{e.preventDefault();const fs=[...$('#pf').files].filter(f=>/^image\//.test(f.type)).slice(0,MAX_PICS);if(!fs.length)return toast('Choose an image.');if(!await needLogin())return;
+$('#af').onsubmit=async e=>{e.preventDefault();const fs=[...$('#pf').files].filter(f=>/^image\//.test(f.type)).slice(0,MAX_PICS);if(!fs.length)return toast('Choose an image.');
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
  let rr=null;
  try{const [img,bc]=await Promise.all([shrink(fs[0]),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
   if(bc&&bc.photo&&!ADM){showBan(bc.photo);return}
-  const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await apiAuth(Object.assign({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},ADM?{key:ADK}:{}),{timeout:60000});
+  const nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),r=rr=await api(Object.assign({action:'photo',name:nm,category:$('#pc').value,caption:cp,image:img},ADM?{key:ADK}:{}),{timeout:60000});
   if(!r.ok&&!r.demo){bad=r.error;throw 0}
   const imgs=[img];let miss=0,why='';
   for(let k=1;k<fs.length;k++){btxt.textContent='UPLOADING '+(k+1)+'/'+fs.length+'…';
    let im;try{im=await shrink(fs[k])}catch(x){miss++;continue}
-   const x=r.item?await apiAuth(Object.assign({action:'photoadd',id:r.item.id,image:im},ADM?{key:ADK}:{}),{timeout:60000}):{ok:0,demo:1};
+   const x=r.item?await api(Object.assign({action:'photoadd',id:r.item.id,image:im},ADM?{key:ADK}:{}),{timeout:60000}):{ok:0,demo:1};
    if(x.ok||x.demo)imgs.push(im);else{why=x.error;miss+=fs.length-k;break}}
   const it=r.item?Object.assign(vp(r.item),{thumb:img,mid:img,url:img}):{pid:'l'+Date.now().toString(36),cat:$('#pc').value,title:cp||'Memory',cp:cp,name:nm,uid:'',badge:ADM?(ROLE=='founder'?'founder':'team'):'',cap:'By '+nm,date:new Date().toISOString(),thumb:img,mid:img,url:img};
   if(imgs.length>1)it.pics=imgs;MEM.unshift(it);
@@ -631,11 +631,11 @@ $('#msort').onchange=e=>{msgSort=e.target.value;MFAIL=0;msgs(MSG,'top')};
 {const b=$('#mmore');if(b)b.onclick=()=>{MFAIL=0;loadOlder(msgSort=='old')}}
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
-$('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;if(!await needLogin())return;
+$('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
  const rp=REPLY,form=e.target,btn=form.querySelector('.btn'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
  if(rp){tmp.reply=rp.id;tmp.rname=rp.name;tmp.rtext=rp.text}
  if(btn)btn.disabled=true;MSG.unshift(tmp);if(TOTAL)TOTAL++;msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
- const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await apiAuth(pl);if(btn)btn.disabled=false;
+ const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await api(pl);if(btn)btn.disabled=false;
  if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);if(TOTAL)TOTAL--;msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return r.error=='banned'?showBan(r):toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
@@ -775,7 +775,7 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).',login:'Your Google sign-in expired. Please sign in again · انتهت جلسة جوجل، سجّل الدخول تاني',nologin:'Sign in with Google first · سجّل الدخول بجوجل الأول',authfail:'Could not verify your Google account right now. Try again in a moment · حاول تاني بعد شوية',disabled:'This Google account is disabled.'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({dev:DEV,...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -883,41 +883,9 @@ async function adminInit(){const want=location.hash=='#founder'?'founder':locati
  if(want&&!k)k=prompt(want=='founder'?'Founder key':'Admin key')||'';if(!k)return;
  const r=await api({action:'auth',key:k});
  if(r.ok||r.demo){ADM=true;ADK=k;ROLE=r.role||want||'admin';MLOCK=!!r.locked;try{sessionStorage.setItem('adk',k);sessionStorage.setItem('adr',ROLE)}catch(e){}
-  document.body.classList.add('adm');document.body.classList.toggle('founder',ROLE=='founder');msgForm();acctUI();
+  document.body.classList.add('adm');document.body.classList.toggle('founder',ROLE=='founder');msgForm();
   toast(r.demo?'Staff mode (demo: connect the Backend link).':ROLE=='founder'?'Founder mode is on.':'Admin mode is on.')}
  else{try{sessionStorage.removeItem('adk');sessionStorage.removeItem('adr')}catch(e){}toast(r.error=='unset'?'Change ADMIN_KEY / FOUNDER_KEY in Code.gs first.':'Key not accepted.')}}
-/* ---- Google sign-in (Firebase): browsing is open to everybody; ONLY writing a message / uploading a photo needs a Google account. Staff links (#admin / #founder) keep using their key. ----
-   If SITE.firebase is empty, AUTH.on is false and every function below does nothing: the site works exactly as before. */
-const AUTH=window.AUTH||{on:false,user:()=>null,info:()=>null,onChange:()=>{}};
-async function needLogin(){                                   // true = the visitor may continue (signed in, staff, or login switched off)
- if(!AUTH.on||ADM||AUTH.user())return true;
- const u=await AUTH.signIn();if(u){acctUI();return true}
- const c=(AUTH.lastError||{}).code||'cancel';
- if(c=='redirect')return false;                               // the page is being sent to Google and will come back
- if(c=='inapp'){try{navigator.clipboard&&navigator.clipboard.writeText(location.href.split('#')[0])}catch(x){}
-  toast('Google blocks sign-in inside Facebook / Instagram. Open this link in Chrome or Safari (link copied) · جوجل بتمنع تسجيل الدخول من جوة فيسبوك/انستجرام. افتح اللينك في Chrome أو Safari (اللينك اتنسخ).',12000)}
- else if(c=='cancel')toast('Sign in with Google to post · سجّل الدخول بحساب جوجل علشان تقدر تكتب أو ترفع صورة')
- else toast('Could not sign in ('+c+'). Try again · تعذّر تسجيل الدخول، حاول تاني',9000);
- return false}
-async function apiAuth(b,o){                                  // like api(), but adds the visitor's Google token (nothing changes for staff / when login is off)
- if(!AUTH.on||ADM)return api(b,o);
- if(!AUTH.user())return{ok:0,error:'nologin'};
- let r=await api(Object.assign({},b,{idToken:await AUTH.token(false)}),o);
- if(r&&r.error==='login'){r=await api(Object.assign({},b,{idToken:await AUTH.token(true)}),o);      // an expired token: get a brand-new one and try once more
-  if(r&&r.error==='login'){await AUTH.signOut();acctUI()}}
- return r}
-const G_LOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
-let NAMEFILL='';
-function acctUI(){
- const show=AUTH.on&&!ADM,u=show?AUTH.info():null;
- [$('#macct'),$('#amacct')].forEach(b=>{if(!b)return;b.replaceChildren();b.hidden=!(show&&u);if(!show||!u)return;
-  {if(u.photo){const im=el('img');im.src=u.photo;im.alt='';im.referrerPolicy='no-referrer';b.append(im)}
-   const w=el('span','who');w.append('Signed in as ',el('b','',u.name||u.email),u.email&&u.name?' · '+u.email:'');
-   const x=el('button','out','Sign out');x.type='button';x.onclick=async()=>{await AUTH.signOut();acctUI();toast('Signed out · تم تسجيل الخروج')};b.append(w,x)}});
-
- const nm=u?String(u.name||'').slice(0,30):'';                 // the name box is pre-filled with the Google name (still editable)
- ['#mn','#pn'].forEach(sel=>{const i=$(sel);if(!i)return;const was=!i.value||i.value===NAMEFILL;i.defaultValue=nm;if(was)i.value=nm});NAMEFILL=nm}
-AUTH.onChange(acctUI);acctUI();
 adminInit();
 function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(f);i.onload=()=>{const s=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.82))};i.onerror=rej;i.src=u})}
 (async()=>{const px=await posts();let cur=BACKEND.enabled?readHome():null,ready=false,psig='',msig='',vsig='';
