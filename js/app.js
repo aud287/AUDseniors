@@ -910,11 +910,11 @@ const G_LOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d
 let NAMEFILL='';
 function acctUI(){
  const show=AUTH.on&&!ADM,u=show?AUTH.info():null;
- [$('#macct'),$('#amacct')].forEach(b=>{if(!b)return;b.replaceChildren();b.hidden=!show;if(!show)return;
-  if(u){if(u.photo){const im=el('img');im.src=u.photo;im.alt='';im.referrerPolicy='no-referrer';b.append(im)}
+ [$('#macct'),$('#amacct')].forEach(b=>{if(!b)return;b.replaceChildren();b.hidden=!(show&&u);if(!show||!u)return;
+  {if(u.photo){const im=el('img');im.src=u.photo;im.alt='';im.referrerPolicy='no-referrer';b.append(im)}
    const w=el('span','who');w.append('Signed in as ',el('b','',u.name||u.email),u.email&&u.name?' · '+u.email:'');
-   const x=el('button','out','Sign out');x.type='button';x.onclick=async()=>{await AUTH.signOut();acctUI();toast('Signed out · تم تسجيل الخروج')};b.append(w,x)}
-  else{const g=el('button','gbtn');g.type='button';g.innerHTML=G_LOGO;g.append(el('span','','Sign in with Google · سجّل الدخول بجوجل'));g.onclick=async()=>{g.disabled=true;try{await needLogin()}finally{g.disabled=false}};b.append(g)}});
+   const x=el('button','out','Sign out');x.type='button';x.onclick=async()=>{await AUTH.signOut();acctUI();toast('Signed out · تم تسجيل الخروج')};b.append(w,x)}});
+
  const nm=u?String(u.name||'').slice(0,30):'';                 // the name box is pre-filled with the Google name (still editable)
  ['#mn','#pn'].forEach(sel=>{const i=$(sel);if(!i)return;const was=!i.value||i.value===NAMEFILL;i.defaultValue=nm;if(was)i.value=nm});NAMEFILL=nm}
 AUTH.onChange(acctUI);acctUI();
