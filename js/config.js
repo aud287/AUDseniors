@@ -24,10 +24,10 @@ window.SITE = {
      املأ القيم من Firebase console > Project settings > Your apps > Web app (الخطوات في FIREBASE_SETUP.md).
      لو سيبتها فاضية: الموقع يشتغل زي الأول بالظبط (بدون تسجيل دخول). ===== */
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    appId: ""
+    apiKey: "AIzaSyBnxQuNCt-I3BwhPJJ_xCtoAQ1cCHd6Z3w",
+    authDomain: "aud2026.firebaseapp.com",
+    projectId: "aud2026",
+    appId: "1:177036832691:web:e840471f7954af7b74a5c6"
   },
 
   intro: `SENIORS 2026
