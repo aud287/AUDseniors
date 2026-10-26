@@ -18,7 +18,7 @@ window.SITE = {
      Put the image in assets/ (square, any size). Empty = the class logo is used. */
   founderBadge: "assets/badge-logo.webp",                   // messages sent from  yoursite/#founder
   teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
-  backend: "https://script.google.com/macros/s/AKfycbxxac1s8H7W7_yz2noqiedX4I1vd0hKnt0SJKqe_vPN9iaTvCwvSh0aO9-FtCuvWmIg/exec",                           // Google Apps Script Web app URL (see README.md)
+  backend: "https://script.google.com/macros/s/AKfycbwD9zI0tswLoq_qbvfGQakYLXkrq9QljHCs3-mVkZzSrhU9O55xoI9sEqpIEGDitdPp/exec",                           // Google Apps Script Web app URL (see README.md)
 
   /* ===== تسجيل الدخول بجوجل (Firebase) — مطلوب فقط لكتابة رسالة أو رفع صورة. تصفح الموقع مفتوح للجميع بدون حساب.
      املأ القيم من Firebase console > Project settings > Your apps > Web app (الخطوات في FIREBASE_SETUP.md).
