@@ -545,6 +545,33 @@ function bdPop(b,label){if(bdBtn===b){closeBd();return}closeBd();let p=$('#bdpop
  bdBtn=b;b.setAttribute('aria-expanded','true');bdT=setTimeout(closeBd,3500)}
 addEventListener('click',e=>{if(!e.target.closest('.vbadge'))closeBd()});addEventListener('keydown',e=>{if(e.key=='Escape')closeBd()});
 addEventListener('scroll',closeBd,{passive:true,capture:true});addEventListener('resize',closeBd);
+/* ---- daily message limit: at most DAYMAX messages per device in 24 h. Nothing is shown while you are under the limit. On the attempt that goes OVER it, the POST MESSAGE button explodes and stays gone
+   (even after a refresh) until 24 h after the LAST message, and a pop-up shows in the middle of the screen for 10 s. The backend enforces the same rule per device (error 'daily'). Staff are never limited. ---- */
+const DAYMAX=2,DAYMS=864e5,DK={
+ get(k){let a='',b='';try{a=localStorage.getItem(k)||''}catch(e){}try{const m=document.cookie.match(new RegExp('(?:^|; )'+k+'=([0-9,]*)'));b=m?m[1]:''}catch(e){}      // kept in two places (like the device id): clearing only one of them does not reset the limit
+  return [...new Set((a+','+b).split(',').map(Number).filter(n=>n>0))].sort((x,y)=>x-y)},
+ set(k,v){const s=v.join(',');try{localStorage.setItem(k,s)}catch(e){}try{document.cookie=k+'='+s+';max-age=172800;path=/;SameSite=Lax'+(location.protocol=='https:'?';Secure':'')}catch(e){}}};
+let DT=0,PT=0;
+const dayLock=()=>{const t=DK.get('aud_mts');if(!t.length)return 0;const L=Math.max(...t),n=t.filter(x=>x>L-DAYMS).length;return n>=DAYMAX&&Date.now()<L+DAYMS?L+DAYMS:0};      // limit reached? -> the time it ends (24 h after the last message)
+const dayUntil=()=>{const s=Math.max(0,...DK.get('aud_mlk'));return s>Date.now()?s:0};                                                                  // the lock an attempt set (survives refreshes)
+function dayAdd(){const n=Date.now();DK.set('aud_mts',DK.get('aud_mts').filter(x=>x>n-2*DAYMS).concat(n).slice(-10));return n}
+function dayUndo(n){DK.set('aud_mts',DK.get('aud_mts').filter(x=>x!==n))}
+function dayApply(){const b=$('#mf .btn');if(!b)return;const u=dayUntil();
+ if(u&&!ADM){b.hidden=true;clearTimeout(DT);DT=setTimeout(dayApply,Math.min(u-Date.now()+400,2e9))}      // locked: the button stays gone, and comes back by itself when the 24 h pass
+ else{if(!u&&DK.get('aud_mlk').length)DK.set('aud_mlk',[]);if(b.hidden){b.hidden=false;if(!RM){b.classList.add('boomin');setTimeout(()=>b.classList.remove('boomin'),700)}}}}
+function boom(b){const r=b.getBoundingClientRect(),w=el('div','boomwrap'),done=()=>{b.classList.remove('boomout');b.hidden=true};
+ if(RM){done();return}
+ w.style.left=r.left+r.width/2+'px';w.style.top=r.top+r.height/2+'px';w.append(el('i','boom-ring'),el('i','boom-ring r2'));
+ const cols=['#6b1a2e','#8f2440','#c8a25a','#f7e4a8','#ffffff','#e58a50'];
+ for(let i=0;i<46;i++){const p=el('i','boom-p'),a=Math.random()*Math.PI*2,d=50+Math.random()*150,z=4+Math.random()*9;
+  p.style.cssText='left:'+((Math.random()-.5)*r.width).toFixed(0)+'px;top:'+((Math.random()-.5)*r.height).toFixed(0)+'px;width:'+z.toFixed(1)+'px;height:'+(z*(.5+Math.random()*.9)).toFixed(1)+'px;background:'+cols[i%cols.length]+';--x:'+(Math.cos(a)*d).toFixed(0)+'px;--y:'+(Math.sin(a)*d+Math.random()*60).toFixed(0)+'px;--r:'+((Math.random()*720-360)|0)+'deg;animation-delay:'+((Math.random()*70)|0)+'ms';w.append(p)}
+ document.body.append(w);b.classList.add('boomout');
+ let f=0;const end=()=>{if(!f++)done()};b.addEventListener('animationend',end,{once:true});setTimeout(end,650);setTimeout(()=>w.remove(),1300)}
+function dayPop(){const old=$('#daypop');if(old)old.remove();clearTimeout(PT);
+ const p=el('div','daypop'),a=el('b','','لقد تخطيت الحد الأقصى اليومي لإرسال الرسائل'),e=el('span','','You\u2019ve passed the daily limit for sending messages');a.lang='ar';a.dir='rtl';
+ p.id='daypop';p.setAttribute('role','alert');p.append(ic('alarm_clock','daypop-i'),a,e,el('i','daypop-bar'));
+ const close=()=>{clearTimeout(PT);p.classList.add('out');setTimeout(()=>p.remove(),400)};p.onclick=close;document.body.append(p);PT=setTimeout(close,10000)}      // gone after 10 s (or on a tap)
+function dayHit(u){DK.set('aud_mlk',[u]);clearTimeout(DT);DT=setTimeout(dayApply,Math.min(u-Date.now()+400,2e9));const b=$('#mf .btn');if(b&&!b.hidden)boom(b);dayPop()}
 /* ---- visitor messages on / off. The BACKEND is the real lock; this only shows it. Staff can always post. ---- */
 function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('#mlocknote'),bar=$('#mlockbar');
  f.classList.toggle('paused',stop);[$('#mn'),$('#mt'),f.querySelector('.btn')].forEach(x=>{if(x)x.disabled=stop});if(stop)setReply(null);
@@ -552,7 +579,7 @@ function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('
  if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
  else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
  note.hidden=!note.childNodes.length;
- if(bar){bar.hidden=!ADM;$('#mlock').hidden=!ADM;$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}}
+ if(bar){bar.hidden=!ADM;$('#mlock').hidden=!ADM;$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}dayApply()}
 $('#mlock').onclick=async()=>{if(!ADM)return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
  const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
@@ -632,11 +659,12 @@ $('#msort').onchange=e=>{msgSort=e.target.value;MFAIL=0;msgs(MSG,'top')};
 addEventListener('resize',()=>requestAnimationFrame(fitWall));addEventListener('load',fitWall);if(document.fonts){document.fonts.ready.then(fitWall);document.fonts.addEventListener&&document.fonts.addEventListener('loadingdone',fitWall)}      // re-measure once the handwriting fonts arrive
 setInterval(()=>$$('#wall .ago').forEach(s=>{const a=agoTxt(+s.dataset.t);s.textContent=a?' · '+a:''}),60000);
 $('#mf').onsubmit=async e=>{e.preventDefault();if(MLOCK&&!ADM)return toast(errText('locked'));const n=clean($('#mn').value,30),t=clean($('#mt').value,240);if(!n||!t)return;
+ if(!ADM){const u=dayUntil()||dayLock();if(u)return dayHit(u)}      // over the daily limit: the button explodes, nothing is sent
  const rp=REPLY,form=e.target,btn=form.querySelector('.btn'),tmp={name:n,message:t,date:new Date().toISOString(),badge:ADM?(ROLE=='founder'?'founder':'team'):''};
  if(rp){tmp.reply=rp.id;tmp.rname=rp.name;tmp.rtext=rp.text}
  if(btn)btn.disabled=true;MSG.unshift(tmp);if(TOTAL)TOTAL++;msgs(MSG,msgSort=='new'?'top':'end');form.reset();setReply(null);       // shown right away; the server catches up in the background
- const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const r=await api(pl);if(btn)btn.disabled=false;
- if(!r.ok&&!r.demo){MSG=MSG.filter(m=>m!==tmp);if(TOTAL)TOTAL--;msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}return r.error=='banned'?showBan(r):toast(errText(r.error))}
+ const pl={action:'message',name:n,message:t};if(rp)pl.reply=rp.id;if(ADM)pl.key=ADK;const ts=ADM?0:dayAdd(),r=await api(pl);if(btn)btn.disabled=false;
+ if(!r.ok&&!r.demo){if(ts)dayUndo(ts);MSG=MSG.filter(m=>m!==tmp);if(TOTAL)TOTAL--;msgs(MSG);$('#mn').value=n;$('#mt').value=t;if(rp&&r.error!=='gone'&&!(r.error=='locked'&&!ADM))setReply(rp);if(r.error=='locked'){MLOCK=true;msgForm()}if(r.error=='daily')return dayHit(Date.now()+(+r.left||DAYMS));return r.error=='banned'?showBan(r):toast(errText(r.error))}
  if(r.item){Object.assign(tmp,r.item);msgs(MSG)}toast(r.demo?'Posted (demo: connect the Backend link to keep it).':'Your message is live!')};
 
 /* ---- events ---- */
@@ -775,7 +803,7 @@ const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().t
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',daily:'لقد تخطيت الحد الأقصى اليومي لإرسال الرسائل',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({dev:DEV,...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -805,7 +833,7 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
  ph.forEach((p,i)=>{o.push(p);if(i%3==2&&ev.length)o.push(ev.shift())});return o.concat(ev)}
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
-let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
+let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;dayApply();      // a device that already hit the daily limit never sees the button again (until the 24 h pass)try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
 /* ---- blocking a device from posting. The browser keeps an anonymous id (DEV); the backend remembers which id wrote each message / photo, so the admin or founder can block it from messages, photos or both, for any span.
    Blocked people can still browse everything; when they try to post they see how long the block is and how much is left. Admin or founder lifts a block early from "BLOCKED DEVICES". ---- */
 const addCal=(t0,Y,M)=>{const d=new Date(t0),day=d.getUTCDate();d.setUTCDate(1);d.setUTCFullYear(d.getUTCFullYear()+Y);d.setUTCMonth(d.getUTCMonth()+M);d.setUTCDate(Math.min(day,new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate()));return d.getTime()};      // same calendar maths as the backend

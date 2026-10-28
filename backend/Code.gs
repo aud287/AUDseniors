@@ -18,6 +18,8 @@ const FOUNDER_KEY = 'Bntawakl2030**';   // the FOUNDER's secret (yoursite/#found
 const SHEET_ID = '1tJ_KcZX9P7Od9zWN0_APuiSqGRlP2mwnhnw7LMR_mCo';
 const FOLDER = 'Class2026 Photos';        // Drive folder (created automatically)
 const MAX_B64 = 4000000;                  // max photo size (base64 chars)
+const DAY_MAX = 2;                        // messages one visitor device may post per 24 h (staff are never limited)
+const DAY_MS = 24 * 3600 * 1000;
 const COOLDOWN = 15;                      // seconds between photo/message posts from the same visitor
 const MSG_WINDOW = 200;                   // newest messages sent with the first load (older ones are fetched page by page: nothing is ever hidden)
 const MSG_PAGE = 100;                     // messages per "older notes" page (the page may ask for up to 500 with &n= when it needs them all)
@@ -122,6 +124,16 @@ function role(k) {                                       // whose key is this?  
 function adminState(k) {                                 // 'ok' (admin OR founder: every moderation power) | 'key' (wrong key) | 'unset' (no key was changed from its default)
   if (role(k)) return 'ok';
   return secret('ADMIN_KEY', ADMIN_KEY) === DEF_ADMIN && secret('FOUNDER_KEY', FOUNDER_KEY) === DEF_FOUNDER ? 'unset' : 'key';
+}
+function dailyUntil(dev) {                               // 0 = this device may post · otherwise the time (ms) it may post again: 24 h after its LAST message, once it has DAY_MAX messages inside the 24 h that end with that message
+  const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return 0;
+  const h = heads(t), ci = h.indexOf('dev'), cd = h.indexOf('date'); if (ci < 0 || cd < 0) return 0;
+  const n = Math.min(lr - 1, 1500), from = lr - n + 1;   // the newest 1500 notes are plenty for one day
+  const dv = t.getRange(from, ci + 1, n, 1).getValues(), dt = t.getRange(from, cd + 1, n, 1).getValues(), ts = [];
+  for (let i = 0; i < n; i++) if (String(dv[i][0]) === dev) { const v = dt[i][0], x = v instanceof Date ? v.getTime() : Date.parse(String(v)); if (x > 0) ts.push(x); }
+  if (!ts.length) return 0;
+  const L = Math.max.apply(null, ts), c = ts.filter(x => x > L - DAY_MS).length;
+  return c >= DAY_MAX && Date.now() < L + DAY_MS ? L + DAY_MS : 0;
 }
 function lockOn() { const f = find('Settings', 'key', 'msgLock'); return !!f && String(f.o.value) === '1'; }          // are visitor messages paused?
 const DEV_RE = /^[a-z0-9]{6,32}$/i;
@@ -389,6 +401,7 @@ const ACT = {
       dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });          //   an old cached page that does not send its device id must reload
       const bn = banOf(dev, 'msg'); if (bn) return banErr(bn, 'msg');                 //   blocked by staff
       if (lockOn()) return out({ ok: 0, error: 'locked' });                           //   closed while the founder has paused messages
+      const du = dailyUntil(dev); if (du) return out({ ok: 0, error: 'daily', until: du, left: du - Date.now() });      //   daily limit: DAY_MAX messages, then locked until 24 h after the last one
     }
     it.dev = dev;
     if (d.reply) {                                                                    // a reply is a normal new message + a link to the original; the preview comes from the REAL original, never from what the browser sends
