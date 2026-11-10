@@ -1067,7 +1067,7 @@ dialog.gallery .lbmeta span:nth-child(2) {
 .framewrap{display:flex;flex-direction:column;align-items:center;gap:18px;position:relative}
 .framewrap.locked *{pointer-events:none}
 .lockOverlay{position:absolute;inset:-14px;z-index:5;display:grid;place-items:center;text-align:center;padding:24px;
- border-radius:26px;background:linear-gradient(180deg,#1c0e13d9,#1c0e13f0);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+ border-radius:26px;background: linear-gradient(rgb(28 14 19 / 94%), rgb(28 14 19));-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
  box-shadow:0 20px 50px #0007}
 .lockBox{max-width:320px}
 .lockBox .eyebrow{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.18em;color:var(--gold);background:#ffffff17;padding:5px 14px;border-radius:99px;margin-bottom:14px}
