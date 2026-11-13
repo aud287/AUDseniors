@@ -226,6 +226,7 @@ function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=
  const act=el('div','rl-act'),id=likeId(m);
  if(id){const b=el('button','rl-lk');b.type='button';b.append(svgOf('heart'),el('span','n','0'));b.onclick=ev=>{ev.stopPropagation();toggleLike(id)};lkReg(id,b);act.append(b)}
  if(!m.ev&&!SOLO()&&(m.id||m.pid)){const b=el('button','rl-sh');b.type='button';b.setAttribute('aria-label','Share');b.append(svgOf('share'),el('span','n','Share'));b.onclick=ev=>{ev.stopPropagation();shareMem(m)};act.append(b)}
+ if(s._vset)act.append(s._vset);      // a video post: the settings button sits right under Share (video.js)
  if(m.id)act.append(kebab('photo',m));
  if(CINE&&!m.ev&&P[0]){const amb=el('div','rl-amb');amb.setAttribute('aria-hidden','true');s._amb=amb;ambSet(s,P[0]);s.append(amb)}      // first child = painted behind the picture
  ui.append(info,act);s.append(media,el('div','rl-shade'),ui);if(m.vid&&window.VID&&i===GI)VID.sync()}
@@ -259,7 +260,8 @@ RL.addEventListener('pointerdown',e=>{dX=e.clientX;dY=e.clientY;dT=e.timeStamp;H
 /* double-tap (or double-click) the picture = like it, with a heart that pops where you tapped (it never un-likes: use the heart button for that) */
 RL.addEventListener('pointerup',e=>{const t=e.target;if(!t.closest||!t.closest('.rl-media'))return;
  if(Math.hypot(e.clientX-dX,e.clientY-dY)>10||e.timeStamp-dT>400)return;
- if(e.timeStamp-tapT<320&&Math.hypot(e.clientX-tapX,e.clientY-tapY)<40){tapT=0;const s=t.closest('.rl-item'),m=s&&VALL[+s.dataset.i],id=m&&likeId(m);if(!id)return;
+ if(e.timeStamp-tapT<320&&Math.hypot(e.clientX-tapX,e.clientY-tapY)<40){tapT=0;const s=t.closest('.rl-item'),m=s&&VALL[+s.dataset.i],id=m&&likeId(m);if(m&&m.vid&&window.VID&&VID.side(e,s)){tapT=0;return}      // a video: double-tap on its left / right side skips 10 s (video.js) instead of liking
+  if(!id)return;
   toggleLike(id,true);if(RM)return;const r=s.getBoundingClientRect(),h=el('i','rl-burst');h.append(svgOf('heart'));h.style.left=(e.clientX-r.left)+'px';h.style.top=(e.clientY-r.top)+'px';s.append(h);setTimeout(()=>h.remove(),900)}
  else{tapT=e.timeStamp;tapX=e.clientX;tapY=e.clientY}});
 let rsT=0;addEventListener('resize',()=>{if(!VW.open||VM!=='view'||!RLB)return;RLFIX=1;cancelAnimationFrame(rsT);rsT=requestAnimationFrame(()=>{RL.scrollTo({top:GI*RL.clientHeight,behavior:'auto'});setTimeout(()=>{RLFIX=0},160)})});      // a resize / rotation keeps the same post on screen
