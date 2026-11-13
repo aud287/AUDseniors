@@ -1,9 +1,9 @@
 /* ===================== VIDEO MEMORIES =====================
-   Anyone can post ONE video of up to 3 minutes in "ADD YOUR MEMORY".
-   • A long video shows a 3-minute bar: drag the gold box to choose where the clip starts. The browser then cuts that part out (and compresses it) before upload.
-   • A video that is already ≤ 3 minutes and small is uploaded as it is.
-   • The file goes to Google Drive in 1 MB pieces (backend: vidstart / vidchunk), then the post is created (backend: video). The post shows a poster picture everywhere (board, grid).
-   • In the viewer (Scroll mode) a video plays by itself when its post is on screen; with AUTO on, the viewer moves to the next post when the video ends.
+   Anyone can post ONE video, up to MAXS seconds (3 minutes). A longer video is refused (no cutting).
+   • An MP4 / WebM that is small enough (≤ MAXB) is uploaded exactly as it is (original quality).
+   • A bigger file, or another format (e.g. iPhone .mov), is compressed WHOLE in the browser first (no trimming), then uploaded.
+   • The file goes to Google Drive in 1 MB pieces (backend: vidstart / vidchunk), then the post is created (backend: video).
+   • In the viewer a video plays by itself when its post is on screen; with AUTO on, the viewer moves to the next post when the video ends.
    Needs the app.js globals ($, el, api, toast, MEM, vp, ADM, ADK, RL, VW, GI, VM, AUTO, SOLO, rlStep, bg …). */
 window.VID=(function(){
  'use strict';
@@ -13,41 +13,24 @@ window.VID=(function(){
  const once=(o,ok,bad,ms)=>new Promise((res,rej)=>{let t=setTimeout(()=>rej(new Error('This video took too long to open.')),ms||20000);const a=()=>{clearTimeout(t);o.removeEventListener(ok,a);o.removeEventListener('error',b);res()},b=()=>{clearTimeout(t);o.removeEventListener(ok,a);o.removeEventListener('error',b);rej(new Error(bad||'This video could not be read.'))};o.addEventListener(ok,a);o.addEventListener('error',b)});
  let T=null;                                                           // the chosen video: {file,url,dur,start}
 
- /* ---------------- the 3-minute chooser inside the dialog ---------------- */
- const lenOf=t=>Math.min(MAXS,t.dur);
- function layout(){if(!T||!T.dur)return;const len=lenOf(T),w=$('#vtwin');
-  w.style.width=(len/T.dur*100)+'%';w.style.left=(T.start/T.dur*100)+'%';
-  $('#vtt').textContent=mmss(T.start)+' – '+mmss(T.start+len)+'  ·  '+mmss(len);
-  w.setAttribute('aria-valuemax',String(Math.max(0,Math.floor(T.dur-len))));w.setAttribute('aria-valuenow',String(Math.round(T.start)));w.setAttribute('aria-valuetext','from '+mmss(T.start)+' to '+mmss(T.start+len))}
- function setStart(t){if(!T||!T.dur)return;const len=lenOf(T);t=Math.max(0,Math.min(T.dur-len,t));if(Math.abs(t-T.start)<.01)return;T.start=t;layout();
-  const v=$('#vtv');try{if(!v.seeking)v.currentTime=t}catch(e){}}
+ /* ---------------- the chosen video (preview in the dialog) ---------------- */
  function clear(){const v=$('#vtv');if(v){v.pause();v.removeAttribute('src');v.load()}if(T&&T.url)URL.revokeObjectURL(T.url);T=null;$('#vt').hidden=true}
  function load(f){clear();T={file:f,url:URL.createObjectURL(f),dur:0,start:0};const v=$('#vtv'),mine=T;
-  $('#vt').hidden=false;$('#vtbar').hidden=true;$('#vtt').textContent='';$('#vtl').textContent='Reading the video…';
+  $('#vt').hidden=false;$('#vtt').textContent='';$('#vtl').textContent='Reading the video…';$('#vtn').textContent='Tap the picture to preview.';
   v.onloadedmetadata=()=>{if(T!==mine)return;const d=v.duration;
    if(!isFinite(d)||d<=0){bad();return}
-   mine.dur=d;const long=d>MAXS+.5;$('#vtbar').hidden=!long;
-   $('#vtl').textContent=long?'Choose the 3 minutes to post':'The whole video will be posted';
-   $('#vtn').textContent=long?'Drag the gold box along the video to choose where the 3 minutes start. Tap the picture to preview.':'Tap the picture to preview.';
-   if(!long)$('#vtt').textContent=mmss(d);else layout();
-   $('#pfn').textContent='Video selected · '+mmss(d)+(long?' · choose the 3 minutes below.':'.')+(fileCount()>1?' (Photos are ignored: a post is either one video or photos.)':'')};
+   if(d>MAXS+.5){bad('This video is '+mmss(d)+' long. The longest allowed is '+mmss(MAXS)+'. Please choose a shorter video.');return}
+   mine.dur=d;$('#vtl').textContent='Ready to post';$('#vtt').textContent=mmss(d);
+   $('#pfn').textContent='Video selected · '+mmss(d)+'.'+(fileCount()>1?' (Photos are ignored: a post is either one video or photos.)':'')};
   v.onerror=()=>{if(T===mine)bad()};
   v.src=mine.url}
  const fileCount=()=>$('#pf').files.length;
- function bad(){toast('This video format cannot be opened by your browser. Try an MP4 video.',6000);clear();try{$('#pf').value=''}catch(e){}$('#pf').onchange()}
+ function bad(msg){toast(msg||'This video format cannot be opened by your browser. Try an MP4 video.',6000);clear();try{$('#pf').value=''}catch(e){}$('#pf').onchange()}
  /* called by app.js when the file box changes: true = a video is chosen (app.js then skips its own photo handling) */
  function pick(){const v=[...$('#pf').files].find(isVid);if(!v){if(T)clear();return false}if(!T||T.file!==v)load(v);return true}
  const has=()=>!!T&&T.dur>0&&[...$('#pf').files].indexOf(T.file)>-1;
- (function wire(){
-  const win=$('#vtwin'),bar=$('#vtbar'),pv=$('#vtv');
-  win.addEventListener('pointerdown',e=>{if(!T||!T.dur)return;e.preventDefault();try{win.setPointerCapture(e.pointerId)}catch(x){}
-   const r=bar.getBoundingClientRect(),x0=e.clientX,s0=T.start;
-   const mv=ev=>setStart(s0+(ev.clientX-x0)/r.width*T.dur),up=()=>{win.removeEventListener('pointermove',mv);win.removeEventListener('pointerup',up);win.removeEventListener('pointercancel',up)};
-   win.addEventListener('pointermove',mv);win.addEventListener('pointerup',up);win.addEventListener('pointercancel',up)});
-  bar.addEventListener('pointerdown',e=>{if(e.target!==bar||!T||!T.dur)return;const r=bar.getBoundingClientRect();setStart((e.clientX-r.left)/r.width*T.dur-lenOf(T)/2)});
-  win.addEventListener('keydown',e=>{if(!T)return;const k=e.key,st=e.shiftKey?10:1;if(k==='ArrowLeft'||k==='ArrowDown'){e.preventDefault();setStart(T.start-st)}else if(k==='ArrowRight'||k==='ArrowUp'){e.preventDefault();setStart(T.start+st)}else if(k==='Home'){e.preventDefault();setStart(0)}else if(k==='End'){e.preventDefault();setStart(1e9)}});
-  pv.addEventListener('click',()=>{if(!T||!T.dur)return;const len=lenOf(T);if(pv.paused){if(pv.currentTime<T.start-.2||pv.currentTime>=T.start+len-.2)pv.currentTime=T.start;pv.play().catch(()=>{})}else pv.pause()});
-  pv.addEventListener('timeupdate',()=>{if(T&&T.dur&&!pv.paused&&pv.currentTime>=T.start+lenOf(T)){pv.pause();pv.currentTime=T.start}});
+ (function wire(){const pv=$('#vtv');
+  pv.addEventListener('click',()=>{if(!T||!T.dur)return;if(pv.paused)pv.play().catch(()=>{});else pv.pause()});
   $('#am').addEventListener('close',()=>{if(pv)pv.pause()})})();
 
  /* ---------------- getting the clip ready ---------------- */
@@ -55,14 +38,14 @@ window.VID=(function(){
   await once(v,'loadeddata');try{v.currentTime=Math.max(0,Math.min(t,(v.duration||t)-.1))}catch(e){}await once(v,'seeked').catch(()=>{});
   const s=Math.min(1,1000/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement('canvas');c.width=Math.max(2,Math.round(v.videoWidth*s));c.height=Math.max(2,Math.round(v.videoHeight*s));
   c.getContext('2d').drawImage(v,0,0,c.width,c.height);v.removeAttribute('src');v.load();return c.toDataURL('image/jpeg',.82)})()}
- /* cut + compress: the chosen part plays (silently, through the browser's audio graph) onto a canvas and is recorded. It takes as long as the clip (up to 3 minutes) */
+ /* compress (whole video, no cutting): the video plays (silently, through the browser's audio graph) onto a canvas and is recorded. It takes as long as the clip (up to 3 minutes) */
  function record(t0,len,prog){return(async()=>{
-  if(!window.MediaRecorder)throw new Error('Your browser cannot cut videos. Choose a video that is 3 minutes or shorter (MP4), or use Chrome.');
+  if(!window.MediaRecorder)throw new Error('Your browser cannot compress this video. Choose an MP4 video under '+Math.round(MAXB/1e6)+' MB, or use Chrome.');
   const v=document.createElement('video');v.playsInline=true;v.preload='auto';v.src=t0.url;await once(v,'loadeddata');
   const sc=Math.min(1,960/Math.max(v.videoWidth,v.videoHeight)),cw=Math.max(2,Math.round(v.videoWidth*sc/2)*2),ch=Math.max(2,Math.round(v.videoHeight*sc/2)*2);
   const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const cx=cv.getContext('2d');
   const mime=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
-  if(!mime||!cv.captureStream)throw new Error('Your browser cannot cut videos. Choose a video that is 3 minutes or shorter (MP4), or use Chrome.');
+  if(!mime||!cv.captureStream)throw new Error('Your browser cannot compress this video. Choose an MP4 video under '+Math.round(MAXB/1e6)+' MB, or use Chrome.');
   const tracks=[...cv.captureStream(30).getVideoTracks()];let ac=null;
   try{const AC=window.AudioContext||window.webkitAudioContext;ac=new AC();ac.resume&&ac.resume();const src=ac.createMediaElementSource(v),dst=ac.createMediaStreamDestination();src.connect(dst);tracks.push(...dst.stream.getAudioTracks())}catch(e){}      // not connected to the speakers: the clip is recorded silently
   const rec=new MediaRecorder(new MediaStream(tracks),{mimeType:mime,videoBitsPerSecond:1500000,audioBitsPerSecond:96000}),parts=[];
@@ -94,10 +77,10 @@ window.VID=(function(){
   btn.disabled=true;spin.hidden=false;const pv=$('#vtv');pv.pause();let bad='',rr=null;
   const hold=e=>{e.preventDefault();e.returnValue=''};addEventListener('beforeunload',hold);
   try{say('CHECKING…');const bc=await api({action:'bancheck'},{tries:1,timeout:15000});if(bc&&bc.photo&&!ADM){showBan(bc.photo);return}
-   const len=Math.min(MAXS,t0.dur-t0.start),nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),cat=$('#pc').value;
+   const len=t0.dur,nm=clean($('#pn').value,30),cp=clean($('#pp').value,140),cat=$('#pc').value;
    say('PREPARING…');const poster=await posterAt(t0,t0.start+Math.min(1,len/2));
    const clip=await prepare(t0,len,p=>say('PROCESSING VIDEO '+Math.round(p*100)+'%'));
-   if(clip.blob.size>MAXB)throw new Error('This video is too large even after compression. Choose a shorter part.');
+   if(clip.blob.size>MAXB)throw new Error('This video is too large even after compression. Choose a shorter or smaller video.');
    if(BACKEND.enabled){const fid=await upload(clip.blob,clip.mime,p=>say('UPLOADING VIDEO '+Math.round(p*100)+'%'));say('PUBLISHING…');
     rr=await api(Object.assign({action:'video',videoId:fid,image:poster,dur:clip.dur,name:nm,category:cat,caption:cp},ADM?{key:ADK}:{}),{timeout:60000});if(!rr.ok){bad=rr.error;throw 0}}
    const local=URL.createObjectURL(clip.blob);      // this visitor sees it at once from the file in memory
@@ -144,7 +127,19 @@ window.VID=(function(){
  function glow(v,item){const a=item&&item._amb;if(!a||!v.videoWidth)return;let c=a._c;
   if(!c){c=a._c=document.createElement('canvas');c.width=48;c.height=Math.max(8,Math.round(48*v.videoHeight/v.videoWidth));c.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block';a.insertBefore(c,a.firstChild)}
   try{c.getContext('2d').drawImage(v,0,0,c.width,c.height)}catch(e){}}
- const srcList=m=>/^blob:/.test(m.vid)?[m.vid]:(m.vfid&&/^[\w-]{10,}$/.test(m.vfid)?['https://drive.usercontent.google.com/download?id='+m.vfid+'&export=download&confirm=t',m.vid]:[m.vid]);
+ const srcList=m=>{if(/^blob:/.test(m.vid))return[m.vid];const id=m.vfid;if(!(id&&/^[\w-]{10,}$/.test(id)))return[m.vid];
+  return['https://drive.usercontent.google.com/download?id='+id+'&export=download&confirm=t',
+         'https://drive.google.com/uc?export=download&id='+id+'&confirm=t',
+         'https://drive.usercontent.google.com/download?id='+id+'&export=download&confirm=t&authuser=0',m.vid]};
+ /* last-but-one resort: the backend sends the file back in 1.5 MB pieces, the page glues them into a file in memory and plays that (works even when Drive refuses to stream to a web page) */
+ const BLOBS=new Map();                                              // file id -> Promise<blob url>
+ function viaBackend(id,prog){if(BLOBS.has(id))return BLOBS.get(id);
+  const pr=(async()=>{const parts=[];let at=0,size=0,mime='video/mp4',fails=0;
+   while(!size||at<size){const r=await api({action:'vidget',id:id,start:at},{timeout:60000,tries:3});
+    if(!r||!r.ok){if(++fails>2)throw new Error('vidget');continue}
+    if(r.next<=at)throw new Error('vidget');size=r.size;mime=r.mime||mime;const bin=atob(r.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);parts.push(u);at=r.next;prog&&prog(Math.min(1,at/size))}
+   return URL.createObjectURL(new Blob(parts,{type:mime}))})();
+  pr.catch(()=>BLOBS.delete(id));BLOBS.set(id,pr);return pr}
  function player(m,item,media,ui){const v=document.createElement('video');v.className='rl-img rl-vid';v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');v.preload='metadata';v.poster=m.url;
   const srcs=srcList(m);let si=0;v.src=srcs[0];v.muted=MUTED||VOL===0;v.volume=VOL;v.defaultPlaybackRate=v.playbackRate=SPEED;
   v.disablePictureInPicture=true;v.disableRemotePlayback=true;v.controls=false;v.setAttribute('controlslist','nodownload nofullscreen noremoteplayback');v.draggable=false;
@@ -224,11 +219,18 @@ window.VID=(function(){
   v.addEventListener('play',()=>item.classList.remove('vpaused'));
   v.addEventListener('ended',()=>{if(item!==RL.children[GI])return;      // AUTO: on to the next post when the video is over · otherwise it plays again
    if(AUTO&&!SOLO())rlStep(1);else{try{v.currentTime=0}catch(e){}play(v)}});
-  v.addEventListener('error',()=>{
-   if(si<srcs.length-1){si++;v.src=srcs[si];v.load();if(item===RL.children[GI])play(v);return}      // try the next address for the same file first
-   if(m._vbad)return;m._vbad=1;                      // last resort: Drive's own player, with its "open in new window" and full-screen buttons covered / switched off
+  let retried=0,tier=0;      // tier 0 = direct addresses · 1 = through the backend · 2 = Drive's own player
+  const toDrive=()=>{if(m._vbad)return;m._vbad=1;                      // very last resort: Drive's own player, with its "open in new window" and full-screen buttons covered / switched off
    if(m.vfid&&media.contains(v)){menu(0);const f=document.createElement('iframe');f.className='rl-img rl-vid';f.allow='autoplay';f.setAttribute('referrerpolicy','no-referrer');f.src='https://drive.google.com/file/d/'+m.vfid+'/preview';
-    const cv=el('div','rl-fbcover');v.replaceWith(f);media.append(cv);[sk,snd,sb,pp,skp,bsy].forEach(x=>x.hidden=true)}rlSched()});
+    const cv=el('div','rl-fbcover');v.replaceWith(f);media.append(cv);[sk,snd,sb,pp,skp,bsy].forEach(x=>x.hidden=true)}rlSched()};
+  const toBackend=()=>{tier=1;if(!m.vfid||!BACKEND.enabled){toDrive();return}
+   bsy.hidden=false;const keep=v.currentTime||0;
+   viaBackend(m.vfid,p=>{tm.textContent='Loading '+Math.round(p*100)+'%'}).then(u=>{if(!v.isConnected&&!media.contains(v))return;v.src=u;v.load();try{v.currentTime=keep}catch(e){}if(item===RL.children[GI]&&!v._user)play(v)}).catch(()=>{bsy.hidden=true;toDrive()})};
+  v.addEventListener('error',()=>{
+   if(tier>0){toDrive();return}
+   if(si<srcs.length-1){si++;v.src=srcs[si];v.load();if(item===RL.children[GI])play(v);return}      // try the next address for the same file first
+   if(!retried&&navigator.onLine!==false){retried=1;si=0;setTimeout(()=>{v.src=srcs[0]+(/\?/.test(srcs[0])?'&':'?')+'r='+Date.now();v.load();if(item===RL.children[GI]&&!v._user)play(v)},1500);return}      // Drive often fails for a moment: one more go before giving up on direct streaming
+   toBackend()});
   return v}
  return{pick,has,submit,sync,player,mmss,side}
 })();

@@ -382,6 +382,7 @@ function doPost(e) {
   if (d.action === 'msgreact') return msgReact(d);
   if (d.action === 'vidstart') return vidStart(d);        // video upload pieces never take the global lock (they do not touch the sheets' data)
   if (d.action === 'vidchunk') return vidChunk(d);
+  if (d.action === 'vidget') return vidGet(d);            // read-only: sends a video file back in pieces (fallback when Drive refuses to stream it to the page)
   A = ACT[d.action]; if (!A) return out({ ok: 0, error: 'action' });
   const rid = /^[a-z0-9]{8,16}$/.test(String(d.rid || '')) ? String(d.rid) : '', c = cache();     // request id: the same write sent twice (a retry) is done only once
   const again = () => { const p = rid ? c.get('rid_' + rid) : null; return p ? raw(p) : null; };
@@ -436,6 +437,28 @@ function vidChunk(d) {                                  // one piece: { session,
   const q = UrlFetchApp.fetch(session, { method: 'put', muteHttpExceptions: true, headers: { 'Content-Range': 'bytes */' + total }, payload: '' });       // a repeated / out-of-order piece: ask Drive where it is, the page continues from there
   if (q.getResponseCode() === 308) return out({ ok: 1, done: 0, next: vidNext(q) });
   noteErr('vidChunk', code + ' ' + res.getContentText().slice(0, 160)); return out({ ok: 0, error: 'server' });
+}
+/* one piece of a video file, as base64: { id, start } -> { ok, size, next, data }. Only files inside the site's own folder that are videos can be read. */
+function vidGet(d) {
+  const id = String(d.id || ''), start = Math.floor(Number(d.start)), PIECE = 1572864;     // 1.5 MB (a multiple of 3, so every piece is clean base64)
+  if (!/^[\w-]{10,}$/.test(id) || !(start >= 0)) return out({ ok: 0, error: 'video' });
+  const c = cache(), mk = 'vg_' + id;
+  let meta = c.get(mk);
+  if (!meta) {
+    let f; try { f = DriveApp.getFileById(id); } catch (x) { return out({ ok: 0, error: 'video' }); }
+    let inside = false; const ps = f.getParents(); while (ps.hasNext()) { if (ps.next().getId() === folder().getId()) inside = true; }
+    if (!inside || String(f.getMimeType()).indexOf('video/') !== 0) return out({ ok: 0, error: 'video' });
+    meta = f.getSize() + '|' + f.getMimeType(); c.put(mk, meta, 3600);
+  }
+  const size = Number(meta.split('|')[0]);
+  if (start >= size) return out({ ok: 0, error: 'video' });
+  const end = Math.min(size, start + PIECE) - 1;
+  const res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media', { muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), Range: 'bytes=' + start + '-' + end } });
+  const code = res.getResponseCode();
+  if (code !== 200 && code !== 206) { noteErr('vidGet', code + ' ' + res.getContentText().slice(0, 120)); return out({ ok: 0, error: 'server' }); }
+  const bytes = res.getBlob().getBytes();
+  if (code === 200 && bytes.length > PIECE) return out({ ok: 0, error: 'server' });     // Range ignored: do not send the whole file in one answer
+  return out({ ok: 1, size: size, mime: meta.split('|')[1], next: start + bytes.length, data: Utilities.base64Encode(bytes) });
 }
 const ACT = {
   message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
