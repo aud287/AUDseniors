@@ -131,7 +131,7 @@ function slot(m,i,L){const s=el('div','slot'),b=el('button',m.ev?'note':'pol');b
  b.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');s.style.animationDelay=(i%BOARD_N)*.09+'s';
  b.setAttribute('aria-label',(m.ev?'Event: ':'Photo: ')+m.title);
  if(m.ev)b.append(ic(m.e||'📌','em'),el('small','',fmt(m.date)),el('b','',m.title));
- else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
+ else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));if(m.vid)p.append(el('span','vbadge','▶'));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
  b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id)s.append(kebab('photo',m));return s}
 function strings(){const B=$('#board'),r=B.getBoundingClientRect(),P=$$('#grid .pin').map(p=>{const q=p.getBoundingClientRect();return[q.left+q.width/2-r.left-B.clientLeft,q.top+q.height/2-r.top-B.clientTop]});let h='';
  const ln=(a,b,c)=>{h+='<path pathLength="1" stroke="'+c+'" d="M'+a[0]+' '+a[1]+'Q'+(a[0]+b[0])/2+' '+((a[1]+b[1])/2+Math.hypot(a[0]-b[0],a[1]-b[1])*.12+14)+' '+b[0]+' '+b[1]+'"/>'};
@@ -185,6 +185,7 @@ function vGrid(){const g=$('#vwgrid');g.replaceChildren();let last='';VG=true;
   const b=el('button','vw-cell'+(i===GI?' on':''));b.type='button';b.setAttribute('aria-label','Open photo '+(i+1)+(m.title?': '+m.title:''));
   const p=pic(m,i);p.loading=i<18?'eager':'lazy';b.append(p);if(m.cat)b.append(el('span','vw-cat',m.cat));
   const id=likeId(m),lk=el('span','vw-lk');lk.append(svgOf('heart'),el('b','n','0'));b.append(lk);if(id)lkReg(id,lk);
+  if(m.vid){const x=el('span','vw-vid');x.append(el('i','','▶'),el('b','',window.VID?VID.mmss(m.vdur):''));b.append(x)}
   if(picsOf(m).length>1){const x=el('span','vw-multi');x.title=picsOf(m).length+' photos';x.append(svgOf('stack'));b.append(x)}
   b.onclick=()=>{GI=i;vMode('view')};const w=el('div','vw-w');w.append(b);if(m.id)w.append(kebab('photo',m));g.append(w)})}
 /* ---------- reels ---------- */
@@ -211,7 +212,7 @@ function staffAv(k){const d=BADGES[k],u=DR(G(d.cfg),1),use=safe(u)?u:CONFIG.logo
  if(ok(use)){const i=new Image();i.src=use;i.alt=d.label;i.decoding='async';a.append(i)}else a.append('✓');return a}
 function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=1;RLF.add(i);
  const media=el('div','rl-media'),ui=el('div','rl-ui'),P=m.ev?[]:picsOf(m);let car=null;
- if(m.ev)media.append(ic(m.e||'🎓','rl-em'));else if(P.length>1){car=rlCar(m,P,s);media.append(car)}else media.append(rlImg(m,P[0],media));
+ if(m.ev)media.append(ic(m.e||'🎓','rl-em'));else if(m.vid&&window.VID){media.append(VID.player(m,s,media,ui))}else if(P.length>1){car=rlCar(m,P,s);media.append(car)}else media.append(rlImg(m,P[0],media));
  if(car){ui.classList.add('car');const sg=el('div','rl-seg');for(let k=0;k<P.length;k++)sg.append(el('i',k?'':'on'));s._sg=sg;ui.append(sg);
   [['rl-cb rl-cp','‹','Previous picture',-1],['rl-cb rl-cn','›','Next picture',1]].forEach(([c,t,l,d])=>{const b=el('button',c,t);b.type='button';b.setAttribute('aria-label',l);b.onclick=ev=>{ev.stopPropagation();carTo(car,car._i+d,true)};ui.append(b)})}
  if(m.cat)ui.append(rlTags(m));
@@ -227,7 +228,7 @@ function rlItem(i){const s=RL.children[i],m=VALL[i];if(!s||!m||s._f)return;s._f=
  if(!m.ev&&!SOLO()&&(m.id||m.pid)){const b=el('button','rl-sh');b.type='button';b.setAttribute('aria-label','Share');b.append(svgOf('share'),el('span','n','Share'));b.onclick=ev=>{ev.stopPropagation();shareMem(m)};act.append(b)}
  if(m.id)act.append(kebab('photo',m));
  if(CINE&&!m.ev&&P[0]){const amb=el('div','rl-amb');amb.setAttribute('aria-hidden','true');s._amb=amb;ambSet(s,P[0]);s.append(amb)}      // first child = painted behind the picture
- ui.append(info,act);s.append(media,el('div','rl-shade'),ui)}
+ ui.append(info,act);s.append(media,el('div','rl-shade'),ui);if(m.vid&&window.VID&&i===GI)VID.sync()}
 /* category tag (top-left of every post): tap it -> the viewer shows only that category. While a category is active an ALL button appears beside it to show everything again.
    It only changes the viewer's own filter (VC); the board behind keeps its filter. In a single shared photo (solo) the tag stays a plain label. */
 function rlTags(m){const box=el('div','rl-tags'),c=vNorm(m);
@@ -238,19 +239,21 @@ function rlTags(m){const box=el('div','rl-tags'),c=vNorm(m);
  return box}
 const rlFillAround=i=>{for(let k=i-1;k<=i+2;k++)rlItem(k)};
 function rlTrim(i){RLF.forEach(k=>{if(Math.abs(k-i)>5){const s=RL.children[k];if(s){s._f=0;s._sg=null;s.replaceChildren()}RLF.delete(k)}})}      // far-away posts give their pictures back
-function setCur(i){if(i===GI&&RLF.has(i))return;GI=i;rlFillAround(i);rlTrim(i);vCount();rlSched()}
+function setCur(i){if(i===GI&&RLF.has(i))return;GI=i;rlFillAround(i);rlTrim(i);vCount();rlSched();if(window.VID)VID.sync()}
 function rlGo(i,smooth){const n=VALL.length,h=RL.clientHeight;if(!n||!h)return;i=Math.max(0,Math.min(n-1,i));rlFillAround(i);RL.scrollTo({top:i*h,behavior:smooth&&!RM?'smooth':'auto'})}
 function vGo(d){const n=VALL.length;if(n<2)return;const j=GI+d;if(j<0||j>=n)rlGo((j+n)%n,false);else rlGo(j,true)}      // past the end it wraps around without a long slide
 function rlStep(d){const c=curCar();if(c){const k=c._i+d;if(k>=0&&k<c._n){carTo(c,k,true);return}}vGo(d)}      // keyboard / auto: finish a post's pictures first, then the next post
 let rlTk=0;RL.addEventListener('scroll',()=>{if(rlTk)return;rlTk=requestAnimationFrame(()=>{rlTk=0;const h=RL.clientHeight;if(RLFIX||!VW.open||VM!=='view'||!h||!VALL.length)return;setCur(Math.max(0,Math.min(VALL.length-1,Math.round(RL.scrollTop/h))))})},{passive:true});
 /* auto-scroll: every few seconds goes to the next picture / post. It waits while a finger or button is held, while another window is open, and while the page is hidden. */
-function rlSched(){clearTimeout(AT);AT=0;if(!AUTO||HOLD||!VW.open||VM!=='view'||SOLO()||document.hidden||!VALL.length)return;AT=setTimeout(rlTick,AUTO_MS)}
+function rlSched(){clearTimeout(AT);AT=0;if(!AUTO||HOLD||!VW.open||VM!=='view'||SOLO()||document.hidden||!VALL.length)return;
+ const cm=VALL[GI];if(cm&&cm.vid&&!cm._vbad)return;      // a VIDEO post is not flipped by the timer: it moves on by itself when the video ends (video.js)
+ AT=setTimeout(rlTick,AUTO_MS)}
 function rlTick(){AT=0;if(!AUTO||!VW.open||VM!=='view'||document.hidden)return;
  if(HOLD||KMOPEN||document.querySelector('dialog[open]:not(#vw)')){rlSched();return}
  rlStep(1);rlSched()}
 function setAuto(on){AUTO=!!on&&!SOLO();const b=$('#vwauto');b.setAttribute('aria-pressed',String(AUTO));b.classList.toggle('on',AUTO);rlSched()}
 $('#vwauto').onclick=()=>setAuto(!AUTO);
-document.addEventListener('visibilitychange',rlSched);
+document.addEventListener('visibilitychange',()=>{rlSched();if(window.VID)VID.sync()});
 RL.addEventListener('pointerdown',e=>{dX=e.clientX;dY=e.clientY;dT=e.timeStamp;HOLD=1;clearTimeout(AT)},{passive:true});
 ['pointerup','pointercancel','blur'].forEach(t=>addEventListener(t,()=>{if(HOLD){HOLD=0;rlSched()}},{passive:true}));
 /* double-tap (or double-click) the picture = like it, with a heart that pops where you tapped (it never un-likes: use the heart button for that) */
@@ -262,10 +265,10 @@ RL.addEventListener('pointerup',e=>{const t=e.target;if(!t.closest||!t.closest('
 let rsT=0;addEventListener('resize',()=>{if(!VW.open||VM!=='view'||!RLB)return;RLFIX=1;cancelAnimationFrame(rsT);rsT=requestAnimationFrame(()=>{RL.scrollTo({top:GI*RL.clientHeight,behavior:'auto'});setTimeout(()=>{RLFIX=0},160)})});      // a resize / rotation keeps the same post on screen
 function vMode(m){VM=m;const grid=m=='grid';VW.classList.toggle('rl-on',!grid);$('#vwview').hidden=grid;$('#vwgrid').hidden=!grid;
  $('#vwmv').setAttribute('aria-pressed',String(!grid));$('#vwmg').setAttribute('aria-pressed',String(grid));
- if(grid){clearTimeout(AT);closeKm();if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));vCount();
+ if(grid){clearTimeout(AT);closeKm();if(window.VID)VID.sync();if(!VG)vGrid();$$('#vwgrid .vw-cell').forEach((b,i)=>b.classList.toggle('on',i===GI));vCount();
   const c=$('#vwgrid .vw-cell.on');if(c)requestAnimationFrame(()=>c.scrollIntoView({block:'center'}))}
  else{const none=!VALL.length;RL.hidden=none;$('#vwempty').hidden=!none;$('#vwp').hidden=$('#vwn').hidden=VALL.length<2;
-  if(none){RL.replaceChildren();RLF=new Set();RLB=false;vCount()}else{if(!RLB)rlBuild();rlGo(GI,false);vCount();rlSched()}}}
+  if(none){RL.replaceChildren();RLF=new Set();RLB=false;vCount()}else{if(!RLB)rlBuild();rlGo(GI,false);vCount();rlSched();if(window.VID)VID.sync()}}}
 function vRefresh(near){const keep=VALL[GI]&&pidOf(VALL[GI]);VALL=vList();const at=keep?VALL.findIndex(m=>pidOf(m)===keep):-1;GI=at<0?Math.max(0,Math.min(near||0,VALL.length-1)):at;      // near = where the photo that just went away was, so the viewer lands on its neighbour
  vChips();VG=false;RLB=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;vMode(VM)}
 function openGallery(mode,m){VW.classList.remove('solo');VC=cat;VS=sortDir;VALL=vList();
@@ -273,7 +276,7 @@ function openGallery(mode,m){VW.classList.remove('solo');VC=cat;VS=sortDir;VALL=
  VG=false;RLB=false;$('#vwgrid').replaceChildren();$('#vwsort').value=VS;vChips();vOpen();vMode(mode)}      // open first: the reel needs the window on screen to measure itself
 function openLB(L,i){if(!L.length)return;VW.classList.add('solo');setAuto(false);VALL=L;GI=((i%L.length)+L.length)%L.length;VG=false;RLB=false;vOpen();vMode('view')}
 function vOpen(){if(VW.open)return;document.body.style.overflow='hidden';try{history.pushState({vw:1},'')}catch(e){}VW.showModal()}
-VW.addEventListener('close',()=>{document.body.style.overflow='';clearTimeout(AT);closeKm();setAuto(false);RL.replaceChildren();RLF=new Set();RLB=false;$('#vwgrid').replaceChildren();VG=false;      // nothing stays in memory once it is closed
+VW.addEventListener('close',()=>{document.body.style.overflow='';clearTimeout(AT);closeKm();setAuto(false);RL.replaceChildren();if(window.VID)VID.sync();RLF=new Set();RLB=false;$('#vwgrid').replaceChildren();VG=false;      // nothing stays in memory once it is closed
  if(history.state&&history.state.vw)history.back()});
 addEventListener('popstate',()=>{if(VW.open)VW.close()});
 $('#vwx').onclick=()=>VW.close();$('#vwp').onclick=()=>vGo(-1);$('#vwn').onclick=()=>vGo(1);
@@ -295,7 +298,7 @@ addEventListener('hashchange',()=>{if(window.DATA_READY)deepLink()});
    The menu goes away when you tap anywhere else, scroll, press Esc, or move the mouse off it. It lives inside the open gallery window when there is one (a window can only be clicked inside itself). ---- */
 let KM=null,KMB=null,KMT=0,KMOPEN=false;
 const msgItems=m=>{const a=[{icon:'📌',label:isPin(m)?'Unpin message':'Pin to top',run:()=>pinMsg(m,!isPin(m))}];if(m.bn&&!m.badge)a.push({icon:'🚫',label:'Block this device',run:()=>openBan('message',m)});a.push({icon:'🗑️',label:'Delete message',danger:1,run:()=>del('message',m.id)});return a};
-const photoItems=m=>{const a=[];if(m.bn)a.push({icon:'🚫',label:'Block this device',run:()=>openBan('photo',m)});a.push({icon:'🗑️',label:'Delete photo',danger:1,run:()=>del('photo',m.id)});return a};
+const photoItems=m=>{const a=[];if(m.bn)a.push({icon:'🚫',label:'Block this device',run:()=>openBan('photo',m)});a.push({icon:'🗑️',label:m.vid?'Delete video':'Delete photo',danger:1,run:()=>del('photo',m.id)});return a};
 const kmKeep=()=>clearTimeout(KMT),kmLeave=()=>{clearTimeout(KMT);KMT=setTimeout(()=>closeKm(),450)};
 function closeKm(focus){clearTimeout(KMT);if(!KM||KM.hidden)return;KM.hidden=true;KMOPEN=false;const b=KMB;KMB=null;if(b){b.setAttribute('aria-expanded','false');if(focus){try{b.focus({preventScroll:true})}catch(e){}}}}
 function openKm(btn,items,byKey){if(KMB===btn&&KMOPEN){closeKm();return}closeKm();
@@ -317,8 +320,8 @@ addEventListener('resize',()=>closeKm());addEventListener('keydown',e=>{if(e.key
 $('#add').onclick=openAdd;
 /* a post can hold up to 10 pictures (a carousel): the first one creates the post, the others are added one request at a time, so no single request is heavy and nothing blocks the likes */
 const MAX_PICS=10,PF_HINT='You can pick up to 10 photos at once: they become a swipeable carousel.';
-$('#pf').onchange=()=>{const n=$('#pf').files.length;$('#pfn').textContent=n>MAX_PICS?'Only the first '+MAX_PICS+' photos will be used.':n>1?n+' photos selected: they will be posted as a carousel.':n==1?'1 photo selected.':PF_HINT};
-$('#af').onsubmit=async e=>{e.preventDefault();const fs=[...$('#pf').files].filter(f=>/^image\//.test(f.type)).slice(0,MAX_PICS);if(!fs.length)return toast('Choose an image.');
+$('#pf').onchange=()=>{if(window.VID&&VID.pick())return;const n=$('#pf').files.length;$('#pfn').textContent=n>MAX_PICS?'Only the first '+MAX_PICS+' photos will be used.':n>1?n+' photos selected: they will be posted as a carousel.':n==1?'1 photo selected.':PF_HINT};
+$('#af').onsubmit=async e=>{e.preventDefault();if(window.VID&&VID.has())return VID.submit(e);const fs=[...$('#pf').files].filter(f=>/^image\//.test(f.type)).slice(0,MAX_PICS);if(!fs.length)return toast('Choose an image.');
  const btn=$('#afbtn'),spin=$('#afspin'),btxt=$('#afbtxt');btn.disabled=true;spin.hidden=false;btxt.textContent='UPLOADING…';let bad='';
  let rr=null;
  try{const [img,bc]=await Promise.all([shrink(fs[0]),api({action:'bancheck'},{tries:1,timeout:15000})]);          // is this device blocked from photos? (asked while the photo is being resized, so no extra wait)
@@ -796,14 +799,14 @@ const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.targ
 const sp=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)$$('nav a').forEach(a=>a.classList.toggle('on',a.hash=='#'+e.target.id))}),{rootMargin:'-45% 0px -50% 0px'});$$('section[id]').forEach(s=>sp.observe(s));
 
 /* ---- data: your Blogger posts (photos) + backend (visitor photos, messages, votes) ---- */
-const FID=(id,w)=>'https://lh3.googleusercontent.com/d/'+id+'=w'+w;
+const FID=(id,w)=>'https://lh3.googleusercontent.com/d/'+id+'=w'+w,VIDURL=id=>'https://drive.google.com/uc?export=download&id='+id;      // a video post's file in Drive (video.js plays it)
 let MSG=MESSAGES;
 const CID=(()=>{try{let c=sessionStorage.getItem('cid');if(!c){c=Math.random().toString(36).slice(2);sessionStorage.setItem('cid',c)}return c}catch(e){return'x'}})();
 /* error codes: 'net' = the request never arrived · 'badjson' = the backend answered with something that is not data (an error page: wrong deployment / script error) · 'busy' = the server is overloaded for a moment
    Every request has a time limit (a hung request can never freeze a button) and every write carries a request id (rid): the backend performs a request only once,
    so an automatic retry after a slow or dropped answer can never post, love or vote twice. */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',daily:'لقد تخطيت الحد الأقصى اليومي لإرسال الرسائل',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
+function errText(c){return({wait:'Please wait a few seconds before posting again.',image:'That photo could not be used. Try a smaller or different one.',empty:'Please fill in every field.',busy:'The server is busy for a moment. Try again in a few seconds.',locked:'Messages are paused for now · إرسال الرسائل متوقف حاليًا',daily:'لقد تخطيت الحد الأقصى اليومي لإرسال الرسائل',gone:'The message you replied to is no longer there.',refresh:'Please refresh the page (Ctrl+F5) and try again.',key:'The staff key was not accepted. Reopen your admin / founder link.',founder:'Only the founder link can do this.',server:'The server had a problem. Try again in a moment.',net:'Could not reach the server. Check your connection and try again.',badjson:'The backend is not set up correctly. Re-deploy it (README).',many:'A post can hold up to 10 photos.',video:'That video could not be saved. Try another one.',videofile:'That video is too large or not supported. Try a shorter clip.',late:'Too late to add photos to that post. Make a new one.',noauth:'Only the device that made the post can add photos to it.',action:'The backend needs the updated Code.gs (README, section 14).'})[c]||'Could not send. Try again.'}
 const rid=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return[...a].map(x=>(x%36).toString(36)).join('')};
 async function api(b,o){if(!BACKEND.enabled)return{ok:0,demo:1};o=o||{};const tries=o.tries||2,ms=o.timeout||40000,body=JSON.stringify({dev:DEV,...b,cid:CID,rid:b.rid||rid()});let last={ok:0,error:'net'};
  for(let i=0;i<tries;i++){if(i)await sleep(1200*i);
@@ -826,7 +829,7 @@ async function remote(v){const z={messages:[],photos:[],votes:{}};if(!BACKEND.en
 const HKEY='aud_home_v2',readHome=()=>{try{const o=JSON.parse(localStorage.getItem(HKEY)||'null');return o&&o.j&&o.j.ok?o.j:null}catch(e){return null}},saveHome=j=>{try{localStorage.setItem(HKEY,JSON.stringify({t:Date.now(),j:j}))}catch(e){}};
 function boardSkeleton(){const g=$('#grid');g.replaceChildren();for(let i=0;i<8;i++){const s=el('div','slot sk'),p=el('div','pol');p.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');p.append(el('div','sk-ph'),el('div','sk-cap'));s.append(el('i','pin'),p);g.append(s)}$('#cnt').textContent='Loading memories…';$('#more').hidden=true;requestAnimationFrame(strings)}
 const vp=p=>{const more=String(p.more||'').split(',').map(x=>x.trim()).filter(x=>/^[\w-]{10,}$/.test(x));      // extra pictures of a carousel post
- return{id:p.id,pid:p.id,bn:p.bn?1:0,badge:p.badge||'',uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600),pics:more.length?[p.fileId,...more].map(f=>FID(f,1600)):null}};
+ return{id:p.id,pid:p.id,bn:p.bn?1:0,badge:p.badge||'',uid:p.uid||'',name:p.name,cat:p.category,title:p.caption||'Memory',cp:p.caption||'',cap:'By '+p.name,date:p.date,thumb:FID(p.fileId,500),mid:FID(p.fileId,1000),url:FID(p.fileId,1600),pics:more.length?[p.fileId,...more].map(f=>FID(f,1600)):null,vid:/^[\w-]{10,}$/.test(String(p.video||''))?VIDURL(p.video):'',vfid:String(p.video||''),vdur:Number(p.vdur)||0}};
 function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...MEMORIES.filter(m=>!m.ev));
  ph.sort((a,b)=>String(a.date)<String(b.date)?1:-1);
  const ev=EVENTS.slice().sort((a,b)=>a.d<b.d?-1:1).map(x=>({ev:1,cat:'EVENTS',title:x.t,date:x.d,e:x.e,cap:x.x})),o=[];

@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 <link rel="preconnect" href="https://lh3.googleusercontent.com">
-<link rel="stylesheet" href="css/style.css?v=24">
+<link rel="stylesheet" href="css/style.css?v=25">
 <!-- Fonts load without blocking first paint; text still renders (system font) then swaps in -->
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=DM+Sans:wght@400;600;700&family=Playfair+Display:wght@700;900&family=Playpen+Sans+Arabic:wght@100..800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript>
@@ -95,7 +95,7 @@
 <dialog id="vw" class="vw" aria-label="Memories gallery"><div class="vw-in">
 <div class="vw-top"><div class="vw-ttl"><b>MEMORIES</b><small id="vwcount" aria-live="polite"></small></div>
 <button type="button" class="vw-auto" id="vwauto" aria-pressed="false" aria-label="Auto scroll" title="Auto scroll"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.500 5H17v14h-3.500z"/></svg><span>AUTO</span></button>
-<div class="vw-modes" role="group" aria-label="View mode"><button type="button" id="vwmv" aria-pressed="true">Photo</button><button type="button" id="vwmg" aria-pressed="false">Grid</button></div>
+<div class="vw-modes" role="group" aria-label="View mode"><button type="button" id="vwmv" aria-pressed="true">Scroll</button><button type="button" id="vwmg" aria-pressed="false">Grid</button></div>
 <button type="button" class="vw-x" id="vwx" aria-label="Close">&times;</button></div>
 <div class="vw-fl"><div class="vw-chips" id="vwchips" role="group" aria-label="Filter by category"></div>
 <select id="vwsort" class="vw-sort" aria-label="Sort memories"><option value="new">Newest first</option><option value="old">Oldest first</option></select></div>
@@ -105,8 +105,12 @@
 <p class="rl-empty" id="vwempty" hidden>No photos in this category yet.</p></div></div>
 <div class="vw-grid" id="vwgrid" hidden aria-label="All photos"></div>
 </div></dialog>
-<dialog id="am"><form id="af" class="dlg"><h3>Add your memory</h3><p class="sub">Your photo appears right away on the memory board. Pick several to post a carousel.</p><p class="am-as" id="amas" hidden></p>
-<input type="file" id="pf" accept="image/*" multiple aria-label="Photos" required="required"/><small class="pf-n" id="pfn">You can pick up to 10 photos at once: they become a swipeable carousel.</small><input id="pn" maxlength="30" placeholder="Your name" aria-label="Your name" required="required"/><select id="pc" aria-label="Category"></select><textarea id="pp" maxlength="140" rows="2" placeholder="Caption" aria-label="Caption"></textarea>
+<dialog id="am"><form id="af" class="dlg"><h3>Add your memory</h3><p class="sub">Your memory appears right away on the board. Pick several photos to post a carousel, or one video (up to 3 minutes).</p><p class="am-as" id="amas" hidden></p>
+<input type="file" id="pf" accept="image/*,video/*" multiple aria-label="Photos or video" required="required"/><small class="pf-n" id="pfn">You can pick up to 10 photos at once (a swipeable carousel), or one video of up to 3 minutes.</small>
+<div class="vt" id="vt" hidden><video id="vtv" playsinline muted preload="metadata" aria-label="Video preview"></video>
+<div class="vt-row"><b id="vtl">Choose the 3 minutes to post</b><span id="vtt"></span></div>
+<div class="vt-bar" id="vtbar"><div class="vt-win" id="vtwin" role="slider" tabindex="0" aria-label="Start of the 3-minute clip" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i></i><i></i></div></div>
+<small class="vt-n" id="vtn">Drag the gold box along the video to choose where the 3 minutes start. Tap the picture to preview.</small></div><input id="pn" maxlength="30" placeholder="Your name" aria-label="Your name" required="required"/><select id="pc" aria-label="Category"></select><textarea id="pp" maxlength="140" rows="2" placeholder="Caption" aria-label="Caption"></textarea>
 <button class="btn" id="afbtn" type="submit"><span class="spin" id="afspin" hidden></span><span id="afbtxt">SUBMIT MEMORY</span></button> <button type="button" class="btn g x">CANCEL</button></form></dialog>
 
 <dialog id="ask" class="sheet ask" aria-labelledby="askt"><form method="dialog" class="sh">
@@ -141,7 +145,8 @@
 <div class="sh-a"><button class="btn g" type="button" id="blx">CLOSE</button></div>
 </div></dialog>
 <script src="js/config.js?v=20"></script>
-<script src="js/app.js?v=22"></script>
+<script src="js/app.js?v=23"></script>
+<script src="js/video.js?v=1"></script>
 </body>
 </html>
 

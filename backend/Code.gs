@@ -1,4 +1,6 @@
-/* CLASS OF 2026 — backend (Google Apps Script) · v6  "photo likes + carousel posts"
+/* CLASS OF 2026 — backend (Google Apps Script) · v7  "video memories"
+   v7 = v6 + VIDEO posts (up to 3 minutes, trimmed in the browser): the browser uploads the clip in 1 MB pieces (`vidstart` + `vidchunk`, straight into Google Drive through its resumable-upload API),
+   then `video` creates the post (poster picture + the video's Drive id in the new columns `video` / `vdur` of the Photos tab). Deleting a video post trashes the video file too.
    v6 = v5 + (1) likes on photos use the SAME durable reaction pipeline as the wall messages (a photo id is a valid reaction target everywhere an id is checked),
    (2) a photo post can hold up to 10 pictures (column `more` in Photos, extra pictures are added one request at a time by `photoadd`),
    (3) a reply keeps the FULL text of the message it answers, (4) the blocked-devices list keeps the FULL name + text/caption.
@@ -18,6 +20,10 @@ const FOUNDER_KEY = 'Bntawakl2030**';   // the FOUNDER's secret (yoursite/#found
 const SHEET_ID = '1tJ_KcZX9P7Od9zWN0_APuiSqGRlP2mwnhnw7LMR_mCo';
 const FOLDER = 'Class2026 Photos';        // Drive folder (created automatically)
 const MAX_B64 = 4000000;                  // max photo size (base64 chars)
+const MAX_VID = 48000000;                 // max video size in BYTES (the browser trims to 3 minutes and compresses to stay under this)
+const MAX_VID_SEC = 185;                  // longest video a post may declare (3 minutes + a little slack)
+const VID_MIME = ['video/mp4', 'video/webm'];
+const VID_UP = 'https://www.googleapis.com/upload/drive/v3/files?';   // the only address a chunk may be sent to
 const DAY_MAX = 2;                        // messages one visitor device may post per 24 h (staff are never limited)
 const DAY_MS = 24 * 3600 * 1000;
 const COOLDOWN = 15;                      // seconds between photo/message posts from the same visitor
@@ -36,7 +42,7 @@ const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five r
 const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
   Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
-  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device)
+  Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge', 'video', 'vdur'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device) · video = Drive id of the video file when this post is a video (fileId is then its poster picture) · vdur = its length in seconds
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
@@ -319,7 +325,7 @@ function buildPub() {
   const msgs = M.list.slice().reverse(); let pin = pinId && !M.list.some(m => String(m.id) === pinId) ? find('Messages', 'id', pinId) : null;    // a pinned note that is older than the window is still shown
   if (pin) msgs.unshift(pin.o);
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
-  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || '') })),
+  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || ''), video: String(r.video || ''), vdur: Number(r.vdur) || 0 })),
     messages: msgs.map(noDev), votes: votes, oldest: M.list.length ? String(M.list[0].id) : '', more: M.more ? 1 : 0, total: mo.ids.length };      // total = how many notes exist (the page shows it; older ones load as the reader scrolls)
 }
 function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder(), photoOrder()) }; }
@@ -374,6 +380,8 @@ function doPost(e) {
   let d, A;
   try { d = JSON.parse(e.postData.contents); } catch (x) { return out({ ok: 0, error: 'badjson' }); }
   if (d.action === 'msgreact') return msgReact(d);
+  if (d.action === 'vidstart') return vidStart(d);        // video upload pieces never take the global lock (they do not touch the sheets' data)
+  if (d.action === 'vidchunk') return vidChunk(d);
   A = ACT[d.action]; if (!A) return out({ ok: 0, error: 'action' });
   const rid = /^[a-z0-9]{8,16}$/.test(String(d.rid || '')) ? String(d.rid) : '', c = cache();     // request id: the same write sent twice (a retry) is done only once
   const again = () => { const p = rid ? c.get('rid_' + rid) : null; return p ? raw(p) : null; };
@@ -389,6 +397,45 @@ function doPost(e) {
     return res;
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
   finally { lock.releaseLock(); }
+}
+/* ---------- video upload: browser -> (this script) -> Google Drive resumable upload, 1 MB at a time ---------- */
+function vidWho(d) {                                    // who may upload: staff (right key) or a visitor device that is not blocked. -> '' (ok) or an error response
+  const r = d.key ? role(d.key) : '';
+  if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });
+  if (!r) { const dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' }); const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo'); }
+  return null;
+}
+function vidStart(d) {                                  // -> { ok, session }  (a Drive upload address for ONE file in our folder)
+  const bad = vidWho(d); if (bad) return bad;
+  const size = Math.floor(Number(d.size) || 0), mime = String(d.mime || '').split(';')[0].toLowerCase();
+  if (size < 1 || size > MAX_VID || VID_MIME.indexOf(mime) < 0) return out({ ok: 0, error: 'videofile' });
+  if (!d.key && limited('vs_' + devId(d.dev), 20)) return out({ ok: 0, error: 'wait' });
+  const res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
+    method: 'post', contentType: 'application/json; charset=UTF-8', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(size) },
+    payload: JSON.stringify({ name: 'v_' + Utilities.getUuid().slice(0, 8) + (mime === 'video/webm' ? '.webm' : '.mp4'), mimeType: mime, parents: [folder().getId()] })
+  });
+  const h = res.getAllHeaders(), loc = String(h.Location || h.location || '');
+  if (res.getResponseCode() !== 200 || loc.indexOf(VID_UP) !== 0) { noteErr('vidStart', res.getContentText().slice(0, 200)); return out({ ok: 0, error: 'server' }); }
+  return out({ ok: 1, session: loc });
+}
+function vidNext(res) {                                 // bytes Drive has kept so far, from a 308 answer
+  const h = res.getAllHeaders(), rg = String(h.Range || h.range || ''), m = /bytes=0-(\d+)/.exec(rg);
+  return m ? Number(m[1]) + 1 : 0;
+}
+function vidChunk(d) {                                  // one piece: { session, start, total, data (base64) } -> { ok, done:0, next } | { ok, done:1, fileId }
+  const bad = vidWho(d); if (bad) return bad;
+  const session = String(d.session || ''), start = Math.floor(Number(d.start)), total = Math.floor(Number(d.total));
+  if (session.indexOf(VID_UP) !== 0 || !(start >= 0) || !(total > 0) || total > MAX_VID) return out({ ok: 0, error: 'videofile' });
+  const bytes = Utilities.base64Decode(String(d.data || '')), end = start + bytes.length - 1;
+  if (!bytes.length || end >= total) return out({ ok: 0, error: 'videofile' });
+  const res = UrlFetchApp.fetch(session, { method: 'put', contentType: 'application/octet-stream', muteHttpExceptions: true, headers: { 'Content-Range': 'bytes ' + start + '-' + end + '/' + total }, payload: Utilities.newBlob(bytes, 'application/octet-stream') });
+  const code = res.getResponseCode();
+  if (code === 200 || code === 201) { let id = ''; try { id = JSON.parse(res.getContentText()).id; } catch (x) {} return id ? out({ ok: 1, done: 1, fileId: id }) : out({ ok: 0, error: 'server' }); }
+  if (code === 308) return out({ ok: 1, done: 0, next: vidNext(res) });
+  const q = UrlFetchApp.fetch(session, { method: 'put', muteHttpExceptions: true, headers: { 'Content-Range': 'bytes */' + total }, payload: '' });       // a repeated / out-of-order piece: ask Drive where it is, the page continues from there
+  if (q.getResponseCode() === 308) return out({ ok: 1, done: 0, next: vidNext(q) });
+  noteErr('vidChunk', code + ' ' + res.getContentText().slice(0, 160)); return out({ ok: 0, error: 'server' });
 }
 const ACT = {
   message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
@@ -432,6 +479,31 @@ const ACT = {
     const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: f.getId(), uid: '', dev: dev, more: '', badge: badge };
     put('Photos', it);
     patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: dev ? 1 : 0, more: '', badge: badge }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
+    return out({ ok: 1, item: noDev(it) });
+  },
+  video(d, now, id) {                                      // the video file is already in Drive (vidstart + vidchunk): this creates the post. image = the poster picture (one frame of the clip)
+    const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
+    const r = d.key ? role(d.key) : '';
+    if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });
+    const name = clean(d.name, 30) || 'Anonymous', vid = clean(d.videoId, 80), dur = Math.max(1, Math.min(MAX_VID_SEC, Math.round(Number(d.dur) || 0)));
+    if (!/^[\w-]{10,}$/.test(vid)) return out({ ok: 0, error: 'video' });
+    let dev = '';
+    if (!r) {
+      dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });
+      const bn = banOf(dev, 'photo'); if (bn) return banErr(bn, 'photo');
+      if (limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
+    }
+    let vf; try { vf = DriveApp.getFileById(vid); } catch (x) { return out({ ok: 0, error: 'video' }); }
+    const inside = (() => { const ps = vf.getParents(), fid = folder().getId(); while (ps.hasNext()) if (ps.next().getId() === fid) return true; return false; })();
+    if (!inside || vf.getSize() > MAX_VID || String(vf.getMimeType()).indexOf('video/') !== 0) { trashFile(vid); return out({ ok: 0, error: 'video' }); }      // only files this backend created in its own folder
+    if (rows('Photos').some(x => String(x.video) === vid)) return out({ ok: 0, error: 'video' });                                                            // one video file = one post
+    vf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const badge = r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '';
+    const pf = folder().createFile(Utilities.newBlob(Utilities.base64Decode(img.split(',')[1]), 'image/jpeg', id + '.jpg'));
+    pf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const it = { id: id, name: name, category: clean(d.category, 40), caption: clean(d.caption, 140), date: now, fileId: pf.getId(), uid: '', dev: dev, more: '', badge: badge, video: vid, vdur: dur };
+    put('Photos', it);
+    patch(x => { if (x.photos.some(m => m.id === it.id)) return; x.photos.unshift({ id: it.id, name: it.name, category: it.category, caption: it.caption, date: it.date, fileId: it.fileId, uid: '', bn: dev ? 1 : 0, more: '', badge: badge, video: vid, vdur: dur }); x.photos = x.photos.slice(0, PHOTO_WINDOW); });
     return out({ ok: 1, item: noDev(it) });
   },
   photoadd(d, now) {                                       // the SAME visitor adds one more picture to the post they just made (a carousel). One picture per request, so the global lock is never held for long
@@ -524,7 +596,7 @@ const ACT = {
     const photo = d.type === 'photo', id = String(d.id);
     const gone = dropRows(photo ? 'Photos' : 'Messages', x => String(x.id) === id);
     if (photo) {
-      gone.forEach(x => { trashFile(x.fileId); String(x.more || '').split(',').forEach(f => trashFile(f.trim())); });      // every picture of a carousel post
+      gone.forEach(x => { trashFile(x.fileId); trashFile(String(x.video || '')); String(x.more || '').split(',').forEach(f => trashFile(f.trim())); });      // every picture of a carousel post (and the video file of a video post)
       if (gone.length) { dropRows('MsgState', x => String(x.msg) === id); recount(); }                                      // its likes go with it
     } else if (gone.length) {
       dropRows('MsgState', x => String(x.msg) === id);   // its reactions go with it ...
