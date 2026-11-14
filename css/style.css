@@ -1585,3 +1585,24 @@ dialog.vw.cine .rl-media,dialog.vw.cine .rl-slide{background:transparent}      /
 .vt-win i{position:absolute;top:50%;width:4px;height:18px;margin-top:-9px;border-radius:3px;background:var(--gold)}
 .vt-win i:first-child{left:5px}.vt-win i:last-child{right:5px}
 .vt-n{display:block;margin:8px 2px 0;font-size:12px;opacity:.75}
+
+
+.rl-nm {
+  display: inline-block;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  cursor: pointer;
+}
+
+.rl-nm.rl-nm-expanded {
+  max-width: min(80vw, 450px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  position: relative;
+  z-index: 9999;
+}
