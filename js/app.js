@@ -131,7 +131,7 @@ function slot(m,i,L){const s=el('div','slot'),b=el('button',m.ev?'note':'pol');b
  b.style.setProperty('--r',(((i*53)%9)-4)*.9+'deg');s.style.animationDelay=(i%BOARD_N)*.09+'s';
  b.setAttribute('aria-label',(m.ev?'Event: ':'Photo: ')+m.title);
  if(m.ev)b.append(ic(m.e||'📌','em'),el('small','',fmt(m.date)),el('b','',m.title));
- else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));if(m.vid)p.append(el('span','vbadge','▶'));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
+ else{const p=el('div','ph'),r=el('div','mrow');p.append(pic(m,i));if(m.vid)p.append(el('span','vplay','▶'));r.append(el('span','dt',fmt(m.date)));b.append(el('span','tag',m.cat||''),p,el('div','cap',m.title),r);s.dataset.pid=pidOf(m)}
  b.onclick=()=>m.ev?openLB([m],0):openGallery('view',m);s.append(el('i','pin'),b);if(m.id)s.append(kebab('photo',m));return s}
 function strings(){const B=$('#board'),r=B.getBoundingClientRect(),P=$$('#grid .pin').map(p=>{const q=p.getBoundingClientRect();return[q.left+q.width/2-r.left-B.clientLeft,q.top+q.height/2-r.top-B.clientTop]});let h='';
  const ln=(a,b,c)=>{h+='<path pathLength="1" stroke="'+c+'" d="M'+a[0]+' '+a[1]+'Q'+(a[0]+b[0])/2+' '+((a[1]+b[1])/2+Math.hypot(a[0]-b[0],a[1]-b[1])*.12+14)+' '+b[0]+' '+b[1]+'"/>'};
