@@ -1606,3 +1606,9 @@ dialog.vw.cine .rl-media,dialog.vw.cine .rl-slide{background:transparent}      /
   position: relative;
   z-index: 9999;
 }
+
+/* ===== messages section on / off (hidden = gone for visitors, nothing deleted) ===== */
+#messages[hidden],#nvmsg[hidden]{display:none!important}
+#messages.mhid{outline:3px dashed #c62828;outline-offset:-3px;position:relative}
+#messages.mhid:before{content:"HIDDEN FROM VISITORS · مخفي عن الزوار";display:block;text-align:center;margin:0 auto 12px;padding:8px 14px;max-width:760px;border-radius:14px;background:#ffeeee;color:#8a1c1c;font:800 12px 'DM Sans',sans-serif;letter-spacing:.04em}
+.mlockbar .btn[hidden]{display:none}
