@@ -611,7 +611,14 @@ function msgForm(){const f=$('#mf');if(!f)return;const stop=MLOCK&&!ADM,note=$('
  if(stop){note.append(el('b','','Messages are paused for now'),el('span','','إرسال الرسائل متوقف حاليًا'));note.lastChild.lang='ar';note.lastChild.dir='rtl'}
  else if(ADM)note.append(el('b','','Posting as '+(ROLE=='founder'?'the Founder':'the Graduation Team')),el('span','',MLOCK?'Visitors can\'t post right now.':'Your name gets a badge.'));
  note.hidden=!note.childNodes.length;
- if(bar){bar.hidden=!ADM;$('#mlock').hidden=!ADM;$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}dayApply()}
+ if(bar){bar.hidden=!ADM;$('#mlock').hidden=!ADM;$('#mlockst').textContent=MLOCK?'Visitor messages are PAUSED':'Visitor messages are open';$('#mlock').textContent=MLOCK?'▶ RESUME VISITOR MESSAGES':'⏸ PAUSE VISITOR MESSAGES';bar.classList.toggle('off',MLOCK)}msgHideApply();dayApply()}
+/* ---- show / hide the whole MESSAGES section. Visitors see nothing at all (section + menu link gone); staff still see it, marked, so they can switch it back. Nothing is deleted. ---- */
+function msgHideApply(){const s=$('#messages'),l=$('#nvmsg'),FD=ADM&&ROLE=='founder',hid=MHIDE&&!FD;if(s){s.hidden=hid;s.classList.toggle('mhid',MHIDE&&FD)}if(l)l.hidden=hid;const b=$('#mhide');if(b){b.hidden=!FD;b.textContent=MHIDE?'👁 SHOW MESSAGES ON SITE':'🙈 HIDE MESSAGES FROM SITE'}
+ const bar=$('#mlockbar');if(bar)bar.classList.toggle('mhidden',MHIDE)}
+$('#mhide').onclick=async()=>{if(!ADM||ROLE!=='founder')return;const b=$('#mhide'),want=!MHIDE;b.disabled=true;
+ const r=await api({action:'msghide',key:ADK,on:want});b.disabled=false;
+ if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
+ MHIDE=r.demo?want:!!r.hidden;msgHideApply();toast(MHIDE?'Messages section is hidden from visitors.':'Messages section is visible again.')};
 $('#mlock').onclick=async()=>{if(!ADM)return;const b=$('#mlock'),want=!MLOCK;b.disabled=true;
  const r=await api({action:'msglock',key:ADK,on:want});b.disabled=false;
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':errText(r.error));return}
@@ -865,7 +872,7 @@ function build(px,rp){const ph=[...rp.map(vp),...px];if(!ph.length)ph.push(...ME
  ph.forEach((p,i)=>{o.push(p);if(i%3==2&&ev.length)o.push(ev.shift())});return o.concat(ev)}
 /* admin: open  yoursite/#admin  and enter the key. The key is checked by the backend; nothing is unlocked on a wrong key.
    AS = who the admin posts as: 'official' (the site's own page) or 'me' (this device's normal visitor profile) — the two never mix. */
-let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,REPLY=null;dayApply();      // a device that already hit the daily limit never sees the button again (until the 24 h pass)try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
+let ADM=false,ADK='',AS='official',ROLE='',MLOCK=false,MHIDE=false,REPLY=null;dayApply();      // a device that already hit the daily limit never sees the button again (until the 24 h pass)try{AS=sessionStorage.getItem('aud_as')=='me'?'me':'official'}catch(e){}
 /* ---- blocking a device from posting. The browser keeps an anonymous id (DEV); the backend remembers which id wrote each message / photo, so the admin or founder can block it from messages, photos or both, for any span.
    Blocked people can still browse everything; when they try to post they see how long the block is and how much is left. Admin or founder lifts a block early from "BLOCKED DEVICES". ---- */
 const addCal=(t0,Y,M)=>{const d=new Date(t0),day=d.getUTCDate();d.setUTCDate(1);d.setUTCFullYear(d.getUTCFullYear()+Y);d.setUTCMonth(d.getUTCMonth()+M);d.setUTCDate(Math.min(day,new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate()));return d.getTime()};      // same calendar maths as the backend
@@ -942,7 +949,7 @@ async function adminInit(){const want=location.hash=='#founder'?'founder':locati
  if(want)recordAdminVisit(want);
  if(want&&!k)k=prompt(want=='founder'?'Founder key':'Admin key')||'';if(!k)return;
  const r=await api({action:'auth',key:k});
- if(r.ok||r.demo){ADM=true;ADK=k;ROLE=r.role||want||'admin';MLOCK=!!r.locked;try{sessionStorage.setItem('adk',k);sessionStorage.setItem('adr',ROLE)}catch(e){}
+ if(r.ok||r.demo){ADM=true;ADK=k;ROLE=r.role||want||'admin';MLOCK=!!r.locked;MHIDE=!!r.hidden;try{sessionStorage.setItem('adk',k);sessionStorage.setItem('adr',ROLE)}catch(e){}
   document.body.classList.add('adm');document.body.classList.toggle('founder',ROLE=='founder');msgForm();
   toast(r.demo?'Staff mode (demo: connect the Backend link).':ROLE=='founder'?'Founder mode is on.':'Admin mode is on.')}
  else{try{sessionStorage.removeItem('adk');sessionStorage.removeItem('adr')}catch(e){}toast(r.error=='unset'?'Change ADMIN_KEY / FOUNDER_KEY in Code.gs first.':'Key not accepted.')}}
@@ -954,6 +961,7 @@ function shrink(f){return new Promise((res,rej)=>{const i=new Image(),u=URL.crea
  const paint=rp=>{
   const p=sigP(rp);if(p!==psig){psig=p;MEM=build(px,rp.photos||[]);chipsR();board();if(VW.open&&!VW.classList.contains('solo'))vRefresh()}
   const lk=!!rp.locked;if(lk!==MLOCK){MLOCK=lk;msgForm()}
+  const hd=!!rp.hidden;if(hd!==MHIDE){MHIDE=hd;msgHideApply()}
   mergeRx(rp);const m=sigM(rp);if(m!==msig){msig=m;MSG=BACKEND.enabled?withOlder(rp):MESSAGES;msgs(MSG)}
   const v=rp.votes||{};POLLS.forEach((q,i)=>q.o.forEach((o,j)=>o[1]=v[i+'_'+j]||0));
   const vg=h32(JSON.stringify(v));if(vg!==vsig){vsig=vg;pollsR(POLLS)}};      // polls are redrawn only when the counts changed; your saved vote is restored from this device
