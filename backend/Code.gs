@@ -159,6 +159,8 @@ function addSpan(t0, Y, Mo, D, H) {                      // calendar years + mon
   d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
   return d.getTime() + D * 864e5 + H * 36e5;
 }
+function hideOn() { const f = find('Settings', 'key', 'msgHide'); return !!f && String(f.o.value) === '1'; }          // is the whole MESSAGES section hidden from the site? (nothing is deleted)
+function setHide(on) { const f = find('Settings', 'key', 'msgHide'), v = on ? '1' : '0'; if (f) setRow('Settings', f.row, { value: v }); else put('Settings', { key: 'msgHide', value: v }); }
 function setLock(on) { const f = find('Settings', 'key', 'msgLock'), v = on ? '1' : '0'; if (f) setRow('Settings', f.row, { value: v }); else put('Settings', { key: 'msgLock', value: v }); }
 
 /* ---------- the cache: a handful of FIXED entries, overwritten in place (the cache is limited to 1000 entries in total, so nothing here may grow with traffic) ----------
@@ -325,7 +327,7 @@ function buildPub() {
   const msgs = M.list.slice().reverse(); let pin = pinId && !M.list.some(m => String(m.id) === pinId) ? find('Messages', 'id', pinId) : null;    // a pinned note that is older than the window is still shown
   if (pin) msgs.unshift(pin.o);
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
-  return { at: Date.now(), locked: lockOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || ''), video: String(r.video || ''), vdur: Number(r.vdur) || 0 })),
+  return { at: Date.now(), locked: lockOn() ? 1 : 0, hidden: hideOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || ''), video: String(r.video || ''), vdur: Number(r.vdur) || 0 })),
     messages: msgs.map(noDev), votes: votes, oldest: M.list.length ? String(M.list[0].id) : '', more: M.more ? 1 : 0, total: mo.ids.length };      // total = how many notes exist (the page shows it; older ones load as the reader scrolls)
 }
 function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder(), photoOrder()) }; }
@@ -559,7 +561,7 @@ const ACT = {
     put('AdminVisits', { date: now, deviceId: devId(d.dev), link: link, deviceType: type, platform: platform, browser: browser, userAgent: ua });
     return out({ ok: 1 });
   },
-  auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0 } : { ok: 0, error: s }); },
+  auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0, hidden: hideOn() ? 1 : 0 } : { ok: 0, error: s }); },
   bancheck(d) {                                            // anyone: "is THIS device blocked right now?" (the page asks before it uploads a heavy photo)
     const dv = devId(d.dev), m = banOf(dv, 'msg'), p = banOf(dv, 'photo');
     return out({ ok: 1, now: Date.now(), msg: m ? banInfo(m, 'msg') : null, photo: p ? banInfo(p, 'photo') : null });
@@ -597,6 +599,13 @@ const ACT = {
       .map(r => ({ dev: String(r.dev), msg: String(r.msg) === '1', photo: String(r.photo) === '1', from: Number(r.from) || 0, until: Number(r.until), label: String(r.label || ''), locked: me !== 'founder' && String(r.by) === 'founder' ? 1 : 0 }))   // locked = set by the founder, so this staff member can not lift it
       .sort((a, b) => a.until - b.until);
     return out({ ok: 1, now: now, bans: list });
+  },
+  msghide(d) {                                             // FOUNDER ONLY: hide / show the whole MESSAGES section on the site (all messages stay stored)
+    const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
+    if (role(d.key) !== 'founder') return out({ ok: 0, error: 'key' });
+    const on = d.on === true || d.on === 1 || d.on === '1';
+    setHide(on);
+    return out({ ok: 1, hidden: on ? 1 : 0 });
   },
   msglock(d) {                                             // admin or founder: pause / resume messages from visitors (staff can still post)
     const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
