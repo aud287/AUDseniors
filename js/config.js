@@ -18,7 +18,7 @@ window.SITE = {
      Put the image in assets/ (square, any size). Empty = the class logo is used. */
   founderBadge: "assets/badge-logo.webp",                   // messages sent from  yoursite/#founder
   teamBadge: "assets/badge-logo.webp",                      // messages sent from  yoursite/#admin  (change this later to your second image, e.g. assets/team-badge.png)
-  backend: "https://script.google.com/macros/s/AKfycbx9MtQjQ981FFaq1nndP2LNqJ8UuzN21AWOezkpj9W3aDY1IqX2WStOWteqswqxi5se/exec",                           // Google Apps Script Web app URL (see README.md)
+  backend: "https://script.google.com/macros/s/AKfycbwK5VBoGF8yjz4tY6lYv4c5V5raxXNT1aM8s84SoG-wR9pn59y_HdkwVRQIY2nZiOh4/exec",                           // Google Apps Script Web app URL (see README.md)
 
   intro: `SENIORS 2026
 5 years. 10 semesters. One dream.
