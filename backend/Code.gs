@@ -24,8 +24,7 @@ const MAX_VID = 48000000;                 // max video size in BYTES (the browse
 const MAX_VID_SEC = 185;                  // longest video a post may declare (3 minutes + a little slack)
 const VID_MIME = ['video/mp4', 'video/webm'];
 const VID_UP = 'https://www.googleapis.com/upload/drive/v3/files?';   // the only address a chunk may be sent to
-const DAY_MAX = 2;                        // messages one visitor device may post per 24 h (staff are never limited)
-const DAY_MS = 24 * 3600 * 1000;
+// Each visitor device may post exactly ONE message, for ever (staff are never limited). The device is remembered in the MsgDevs tab, so deleting the message does not give it another turn.
 const COOLDOWN = 15;                      // seconds between photo/message posts from the same visitor
 const MSG_WINDOW = 200;                   // newest messages sent with the first load (older ones are fetched page by page: nothing is ever hidden)
 const MSG_PAGE = 100;                     // messages per "older notes" page (the page may ask for up to 500 with &n= when it needs them all)
@@ -41,8 +40,9 @@ const CHUNK = 30000;                      // cache chunk size in characters (a c
 const MSG_EMO = ['love', 'haha', 'sad', 'wow', 'party', 'grad'];   // the five reactions (the site shows them as ❤️ 😂 😢 🎉 🎓)
 const MSG_COUNT_COLS = MSG_EMO.length + 1;       // message id + one column per reaction
 const HEAD = {
-  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time)
+  Messages: ['id', 'name', 'message', 'date', 'pin', 'badge', 'reply', 'rname', 'rtext', 'dev', 'hide'],   // pin: '1' = pinned to the top (only one) · badge: 'founder' | 'team' | '' · reply = id of the message this one answers (+ rname / rtext copied at reply time) · hide: '0' = shown to everyone · '1' or EMPTY = hidden from visitors (staff still see it, in grey). Every message that existed before this column was added has it empty, so ALL the old messages start hidden; every new message is written with '0'
   Photos: ['id', 'name', 'category', 'caption', 'date', 'fileId', 'uid', 'dev', 'more', 'badge', 'video', 'vdur'],   // more = comma-separated Drive ids of the EXTRA pictures of a carousel post (fileId is the first one) · dev = anonymous id of the device that posted it (never sent to visitors; lets the admin / founder block that device) · video = Drive id of the video file when this post is a video (fileId is then its poster picture) · vdur = its length in seconds
+  MsgDevs: ['dev', 'date'],                                // devices that already used their ONE message (kept even if the message is deleted later)
   Votes: ['poll', 'option', 'date'],
   Bans: ['dev', 'msg', 'photo', 'from', 'until', 'label', 'by'],   // devices staff (admin or founder) blocked: msg / photo = '1' when blocked from that kind of post · from, until = ms since 1970 · by = 'founder' | 'admin' (who set the block: a founder block can only be lifted by the founder)
   Settings: ['key', 'value'],                               // msgLock = '1' while visitor messages are paused · mr6 = '1' once the recovery import has run
@@ -131,15 +131,18 @@ function adminState(k) {                                 // 'ok' (admin OR found
   if (role(k)) return 'ok';
   return secret('ADMIN_KEY', ADMIN_KEY) === DEF_ADMIN && secret('FOUNDER_KEY', FOUNDER_KEY) === DEF_FOUNDER ? 'unset' : 'key';
 }
-function dailyUntil(dev) {                               // 0 = this device may post · otherwise the time (ms) it may post again: 24 h after its LAST message, once it has DAY_MAX messages inside the 24 h that end with that message
-  const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return 0;
-  const h = heads(t), ci = h.indexOf('dev'), cd = h.indexOf('date'); if (ci < 0 || cd < 0) return 0;
-  const n = Math.min(lr - 1, 1500), from = lr - n + 1;   // the newest 1500 notes are plenty for one day
-  const dv = t.getRange(from, ci + 1, n, 1).getValues(), dt = t.getRange(from, cd + 1, n, 1).getValues(), ts = [];
-  for (let i = 0; i < n; i++) if (String(dv[i][0]) === dev) { const v = dt[i][0], x = v instanceof Date ? v.getTime() : Date.parse(String(v)); if (x > 0) ts.push(x); }
-  if (!ts.length) return 0;
-  const L = Math.max.apply(null, ts), c = ts.filter(x => x > L - DAY_MS).length;
-  return c >= DAY_MAX && Date.now() < L + DAY_MS ? L + DAY_MS : 0;
+function isHid(o) { return String(o.hide) !== '0'; }                 // a message is hidden from visitors unless it was explicitly written / switched to '0'
+function hasPosted(dev) {                                // has this device already used its one message? (MsgDevs remembers it even after the message is deleted; the Messages tab covers messages posted before MsgDevs existed)
+  if (!dev) return false;
+  if (find('MsgDevs', 'dev', dev)) return true;
+  const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return false;
+  const ci = heads(t).indexOf('dev'); if (ci < 0) return false;
+  return t.getRange(2, ci + 1, lr - 1, 1).getValues().some(r => String(r[0]) === dev);
+}
+function pubMsg(m, hidIds) {                             // what a VISITOR may see of a message: never the device id, never the hide flag, and a reply whose original is hidden loses its quoted copy
+  const x = noDev(m); delete x.hide;
+  if (x.reply && hidIds && hidIds[String(x.reply)]) { x.reply = ''; x.rname = ''; x.rtext = ''; }
+  return x;
 }
 function lockOn() { const f = find('Settings', 'key', 'msgLock'); return !!f && String(f.o.value) === '1'; }          // are visitor messages paused?
 const DEV_RE = /^[a-z0-9]{6,32}$/i;
@@ -323,12 +326,14 @@ function maybeFold() {                                  // a reader helps: if ta
 
 /* ---------- public data: built once, kept in a few cache entries, patched in place by writes ---------- */
 function buildPub() {
-  const M = tailRows('Messages', MSG_WINDOW), P = tailRows('Photos', PHOTO_WINDOW), mo = msgOrder(), pinId = mo.pin;
-  const msgs = M.list.slice().reverse(); let pin = pinId && !M.list.some(m => String(m.id) === pinId) ? find('Messages', 'id', pinId) : null;    // a pinned note that is older than the window is still shown
-  if (pin) msgs.unshift(pin.o);
+  const all = rows('Messages').filter(m => String(m.id)), hidIds = {}; all.forEach(m => { if (isHid(m)) hidIds[String(m.id)] = 1; });
+  const vis = all.filter(m => !hidIds[String(m.id)]), win = vis.slice(-MSG_WINDOW), pinId = msgOrder().pin;     // visitors only ever get the VISIBLE messages: hidden ones are not in the data at all
+  const msgs = win.slice().reverse(); const pin = pinId && !hidIds[pinId] && !win.some(m => String(m.id) === pinId) ? vis.find(m => String(m.id) === pinId) : null;    // a pinned note that is older than the window is still shown
+  if (pin) msgs.unshift(pin);
+  const P = tailRows('Photos', PHOTO_WINDOW);
   const votes = {}; rows('Votes').forEach(r => { const k = r.poll + '_' + r.option; votes[k] = (votes[k] || 0) + 1; });
   return { at: Date.now(), locked: lockOn() ? 1 : 0, hidden: hideOn() ? 1 : 0, photos: P.list.slice().reverse().map(r => ({ id: String(r.id), name: r.name, category: r.category, caption: r.caption, date: r.date, fileId: r.fileId, uid: String(r.uid || ''), bn: devId(r.dev) ? 1 : 0, more: String(r.more || ''), badge: String(r.badge || ''), video: String(r.video || ''), vdur: Number(r.vdur) || 0 })),
-    messages: msgs.map(noDev), votes: votes, oldest: M.list.length ? String(M.list[0].id) : '', more: M.more ? 1 : 0, total: mo.ids.length };      // total = how many notes exist (the page shows it; older ones load as the reader scrolls)
+    messages: msgs.map(m => pubMsg(m, hidIds)), votes: votes, oldest: win.length ? String(win[0].id) : '', more: vis.length > win.length ? 1 : 0, total: vis.length };      // total = how many VISIBLE notes exist (older ones load as the reader scrolls)
 }
 function buildAll() { return { d: buildPub(), cnt: readCounts(), win: windowIds(msgOrder(), photoOrder()) }; }
 function loadAll(wantV) {                               // the cached public data, rebuilt if missing / too old. Normal page loads never touch a sheet. -> {v, pub, mr} (pub / mr are strings, or null when wantV already matches)
@@ -358,15 +363,20 @@ function patch(fn) {                                                          //
   let d; try { d = JSON.parse(b.str); fn(d); } catch (e) { bump(); return; }
   if (!blobPut('pub', JSON.stringify(d), b.at)) bump();
 }
-function msgPage(p) {                                                         // older notes, one page: ?scope=msgs&before=<id of the oldest note you have>
+function msgPage(p) {                                                         // older notes, one page: ?scope=msgs&before=<id of the oldest note you have>. Hidden notes are skipped on the server, so a page never comes back empty just because old notes are hidden
   const before = clean(p.before, 40);
   const t = tab('Messages'), lr = t.getLastRow(); if (lr < 2) return out({ ok: 1, messages: [], mr: {}, oldest: '', more: 0, total: 0 });
-  const h = heads(t), lc = t.getLastColumn(), ids = t.getRange(2, h.indexOf('id') + 1, lr - 1, 1).getValues();
+  const h = heads(t), lc = t.getLastColumn(), ids = t.getRange(2, h.indexOf('id') + 1, lr - 1, 1).getValues(), hc = h.indexOf('hide'), hv = hc >= 0 ? t.getRange(2, hc + 1, lr - 1, 1).getValues() : null;
+  const hid = i => !hv || String(hv[i][0]) !== '0', hidIds = {}; let total = 0; for (let i = 0; i < ids.length; i++) { if (hid(i)) hidIds[String(ids[i][0])] = 1; else total++; }
   let end = -1; for (let i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === before) { end = i; break; }
-  if (end < 0) return out({ ok: 1, messages: [], mr: {}, oldest: '', more: 0, gone: 1, total: ids.length });
-  const per = Math.min(500, Math.max(1, Math.floor(Number(p.n)) || MSG_PAGE)), start = Math.max(0, end - per), list = end > start ? t.getRange(start + 2, 1, end - start, lc).getValues().map(r => asObj(h, r)) : [];
+  if (end < 0) return out({ ok: 1, messages: [], mr: {}, oldest: '', more: 0, gone: 1, total: total });
+  const per = Math.min(500, Math.max(1, Math.floor(Number(p.n)) || MSG_PAGE)); let lo = end, got = 0;
+  while (lo > 0 && got < per) { lo--; if (!hid(lo)) got++; }                  // walk back until `per` VISIBLE notes were found
+  const list = [];
+  if (got) t.getRange(lo + 2, 1, end - lo, lc).getValues().forEach((r, k) => { if (!hid(lo + k)) list.push(asObj(h, r)); });
+  let more = 0; for (let i = lo - 1; i >= 0; i--) if (!hid(i)) { more = 1; break; }
   const cnt = readCounts(), mr = {}; list.forEach(m => { const k = String(m.id); if (cnt[k]) mr[k] = cnt[k]; });
-  return out({ ok: 1, messages: list.slice().reverse().map(noDev), mr: mr, oldest: list.length ? String(list[0].id) : '', more: start > 0 ? 1 : 0, total: ids.length });
+  return out({ ok: 1, messages: list.slice().reverse().map(m => pubMsg(m, hidIds)), mr: mr, oldest: list.length ? String(list[0].id) : '', more: more, total: total });
 }
 function doGet(e) {
   const p = (e && e.parameter) || {};
@@ -395,7 +405,7 @@ function doPost(e) {
     hit = again(); if (hit) return hit;                                        // an earlier try of this same request finished while we waited
     PATCHED = false;
     const res = A(d, new Date().toISOString(), rid || Utilities.getUuid().slice(0, 8)), body = res.getContent(), ok = body.indexOf('"ok":1') > -1;
-    if (ok && !PATCHED && ['auth', 'bancheck', 'listbans', 'ban', 'unban'].indexOf(d.action) < 0) bump();     // writes that did not patch the public data throw it away
+    if (ok && !PATCHED && ['auth', 'bancheck', 'listbans', 'ban', 'unban', 'hiddenmsgs'].indexOf(d.action) < 0) bump();     // writes that did not patch the public data throw it away
     if (ok && rid) c.put('rid_' + rid, body, RID_TTL);
     return res;
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
@@ -466,25 +476,28 @@ const ACT = {
   message(d, now, id) {                                   // a visitor, or staff posting from the founder / admin link (their message gets a badge)
     const r = d.key ? role(d.key) : '';
     if (d.key && !r) return out({ ok: 0, error: adminState(d.key) });                 // a wrong staff key never falls back to an unmarked visitor post
-    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '' };
+    const it = { id: id, name: clean(d.name, 30), message: clean(d.message, 240), date: now, badge: r === 'founder' ? 'founder' : r === 'admin' ? 'team' : '', reply: '', rname: '', rtext: '', hide: '0' };      // hide '0' = visible: only messages that existed before the hide column are hidden
     if (!it.name || !it.message) return out({ ok: 0, error: 'empty' });
-    let dev = '';
+    let dev = '', hidRef = null;
     if (!r) {                                                                         // visitors only (staff are never blocked):
       dev = devId(d.dev); if (!dev) return out({ ok: 0, error: 'refresh' });          //   an old cached page that does not send its device id must reload
       const bn = banOf(dev, 'msg'); if (bn) return banErr(bn, 'msg');                 //   blocked by staff
       if (lockOn()) return out({ ok: 0, error: 'locked' });                           //   closed while the founder has paused messages
-      const du = dailyUntil(dev); if (du) return out({ ok: 0, error: 'daily', until: du, left: du - Date.now() });      //   daily limit: DAY_MAX messages, then locked until 24 h after the last one
+      if (hasPosted(dev)) return out({ ok: 0, error: 'once' });                       //   ONE message per device, for ever
     }
     it.dev = dev;
     if (d.reply) {                                                                    // a reply is a normal new message + a link to the original; the preview comes from the REAL original, never from what the browser sends
       const f = find('Messages', 'id', String(d.reply).slice(0, 60));
       if (!f) return out({ ok: 0, error: 'gone' });                                   // the original was deleted meanwhile
+      if (!r && isHid(f.o)) return out({ ok: 0, error: 'gone' });                     // a visitor can not answer a hidden note
+      if (isHid(f.o)) hidRef = {}, hidRef[String(f.o.id)] = 1;                         // staff answering a hidden note: the public copy of the reply never carries its text
       it.reply = String(f.o.id); it.rname = clean(f.o.name, 30); it.rtext = clean(String(f.o.message || '').replace(/\s+/g, ' '), 240);      // the FULL original (messages are at most 240 characters), so the reply can show all of it
     }
     if (!r && limited(d.cid, COOLDOWN)) return out({ ok: 0, error: 'wait' });
     put('Messages', it);
-    patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(noDev(it)); if (x.total != null) x.total++; if (x.messages.length > MSG_WINDOW + 1) { x.messages = x.messages.slice(0, MSG_WINDOW + 1); x.more = 1; x.oldest = String(x.messages[x.messages.length - 1].id); } });
-    return out({ ok: 1, item: noDev(it) });
+    if (dev) put('MsgDevs', { dev: dev, date: now });                                 // this device has now used its one message
+    patch(x => { if (x.messages.some(m => String(m.id) === it.id)) return; x.messages.unshift(pubMsg(it, hidRef)); if (x.total != null) x.total++; if (x.messages.length > MSG_WINDOW + 1) { x.messages = x.messages.slice(0, MSG_WINDOW + 1); x.more = 1; x.oldest = String(x.messages[x.messages.length - 1].id); } });
+    return out({ ok: 1, item: pubMsg(it, hidRef) });
   },
   photo(d, now, id) {                                      // visitor photo, or staff posting from the founder / admin link (their post gets the class-logo avatar)
     const img = String(d.image || ''); if (img.indexOf('data:image/') !== 0 || img.length > MAX_B64) return out({ ok: 0, error: 'image' });
@@ -564,7 +577,7 @@ const ACT = {
   auth(d) { const s = adminState(d.key); return out(s === 'ok' ? { ok: 1, role: role(d.key), locked: lockOn() ? 1 : 0, hidden: hideOn() ? 1 : 0 } : { ok: 0, error: s }); },
   bancheck(d) {                                            // anyone: "is THIS device blocked right now?" (the page asks before it uploads a heavy photo)
     const dv = devId(d.dev), m = banOf(dv, 'msg'), p = banOf(dv, 'photo');
-    return out({ ok: 1, now: Date.now(), msg: m ? banInfo(m, 'msg') : null, photo: p ? banInfo(p, 'photo') : null });
+    return out({ ok: 1, now: Date.now(), msg: m ? banInfo(m, 'msg') : null, photo: p ? banInfo(p, 'photo') : null, posted: hasPosted(dv) ? 1 : 0 });      // posted = this device already used its one message
   },
   ban(d) {                                                 // admin or founder: block the device behind one message / photo from posting messages, photos or both, for any span
     const st = adminState(d.key); if (st !== 'ok') return out({ ok: 0, error: st });   // admin OR founder
@@ -616,12 +629,26 @@ const ACT = {
   pinmsg(d) {                                              // admin: pin a message to the top of the wall / unpin it (pinning one un-pins the others). Cannot change anyone's name or text
     const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
     const m = find('Messages', 'id', clean(d.id, 40)); if (!m) return out({ ok: 0, error: 'nomsg' });
+    if (d.pin && isHid(m.o)) return out({ ok: 0, error: 'hiddenmsg' });               // a hidden note can not be pinned (show it first)
     if (d.pin) {                                           // only one pinned message: clear the pin column first
       const t = tab('Messages'), c = heads(t).indexOf('pin'), lr = t.getLastRow();
       if (c >= 0 && lr > 1) txt(t.getRange(2, c + 1, lr - 1, 1)).setValues(new Array(lr - 1).fill(['']));
     }
     setRow('Messages', m.row, { pin: d.pin ? '1' : '' });
     return out({ ok: 1 });                                 // the cached public data is rebuilt automatically after a write that does not patch it
+  },
+  hidemsg(d) {                                             // admin or founder: hide ONE message from visitors / show it again (nothing is deleted; staff always see it). Not the same as msghide, which hides the whole section
+    const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
+    const m = find('Messages', 'id', clean(d.id, 40)); if (!m) return out({ ok: 0, error: 'nomsg' });
+    const on = d.hide === true || d.hide === 1 || d.hide === '1';
+    setRow('Messages', m.row, on ? { hide: '1', pin: '' } : { hide: '0' });            // a hidden note loses its pin
+    return out({ ok: 1, hide: on ? 1 : 0 });               // not a patch, so the cached public data is rebuilt on the next read
+  },
+  hiddenmsgs(d) {                                          // admin or founder: every message that is hidden from visitors (the public data never contains them)
+    const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
+    const list = rows('Messages').filter(m => String(m.id) && isHid(m)), cnt = readCounts(), mr = {};      // (a blank row left over from a delete is not a message)
+    list.forEach(m => { const k = String(m.id); if (cnt[k]) mr[k] = cnt[k]; });
+    return out({ ok: 1, messages: list.reverse().map(m => { const x = noDev(m); x.hide = '1'; x.pin = ''; return x; }), mr: mr });
   },
   delete(d) {                                              // admin: delete a photo or a message
     const s = adminState(d.key); if (s !== 'ok') return out({ ok: 0, error: s });
