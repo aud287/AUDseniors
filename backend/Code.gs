@@ -406,7 +406,7 @@ function doPost(e) {
     PATCHED = false;
     const res = A(d, new Date().toISOString(), rid || Utilities.getUuid().slice(0, 8)), body = res.getContent(), ok = body.indexOf('"ok":1') > -1;
     if (ok && !PATCHED && ['auth', 'bancheck', 'listbans', 'ban', 'unban', 'hiddenmsgs'].indexOf(d.action) < 0) bump();     // writes that did not patch the public data throw it away
-    if (ok && rid) c.put('rid_' + rid, body, RID_TTL);
+    if (ok && rid && d.action !== 'hiddenmsgs') { try { c.put('rid_' + rid, body, RID_TTL); } catch (x) { } }      // the request-id copy must never turn a finished action into an error (the cache refuses values over 100 KB)
     return res;
   } catch (err) { console.error(err); return out({ ok: 0, error: 'server', detail: String(err).slice(0, 160) }); }
   finally { lock.releaseLock(); }

@@ -575,8 +575,10 @@ const mergeRx=rp=>{if(!BACKEND.enabled||!rp.messages)return;const s=rp.mr||{},no
    Object.keys(k).forEach(e=>{if(!(k[e]>0))delete k[e]});if(Object.keys(k).length)RX[id]=k;else delete RX[id];if(!sameRx(before,RX[id]))rxDraw(id)})};
 addEventListener('click',e=>{if(!e.target.closest('#wall .msg,#pinwrap .msg'))closeRx()});addEventListener('keydown',e=>{if(e.key=='Escape')closeRx()});
 /* admin / founder: hide ONE message from visitors (or show it again). Hidden notes are grey for staff and do not exist at all for visitors. This is NOT the founder's "hide the whole section" switch. */
-async function loadHid(){if(!ADM||!BACKEND.enabled)return;const r=await api({action:'hiddenmsgs',key:ADK},{tries:2});if(!r.ok)return;
- HID=(r.messages||[]).map(m=>Object.assign(m,{hid:1}));const now=Date.now();Object.keys(r.mr||{}).forEach(id=>{if(!((id in PEND)||now-(RXT[id]||0)<3e4))RX[id]=r.mr[id]});msgs(MSG)}
+let HIDTRY=0;
+async function loadHid(){if(!ADM||!BACKEND.enabled)return;const r=await api({action:'hiddenmsgs',key:ADK},{tries:3,timeout:60000});
+ if(!r.ok){if(r.error=='action')return toast('Update Code.gs and redeploy it to see the hidden messages.',6000);if(HIDTRY++<2)return void setTimeout(loadHid,4000);toast('Could not load the hidden messages ('+(r.error||'error')+'). Refresh the page.',6000);return}
+ HIDTRY=0;HID=(r.messages||[]).map(m=>Object.assign(m,{hid:1}));const now=Date.now();Object.keys(r.mr||{}).forEach(id=>{if(!((id in PEND)||now-(RXT[id]||0)<3e4))RX[id]=r.mr[id]});msgs(MSG)}
 async function hideMsg(m,hide){const r=await api({action:'hidemsg',id:m.id,key:ADK,hide:hide});
  if(!r.ok&&!r.demo){toast(r.error=='action'?'Update Code.gs and redeploy it first.':r.error=='nomsg'?'That message no longer exists.':'Not saved. Check the admin key.');return}
  const id=String(m.id),not=x=>String(x.id)!==id;
